@@ -1,0 +1,214 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum UserRole {
+  HEAD_GROUP
+  DEPARTMENT_HEAD
+  MEMBER
+}
+
+enum TicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum TicketStatus {
+  TODO
+  IN_PROGRESS
+  IN_REVIEW
+  STUCK
+  DONE
+  CANCELLED
+}
+
+enum RecurrenceFrequency {
+  DAILY
+  WEEKLY
+}
+
+enum ClusterType {
+  DAILY
+  EVENT
+}
+
+enum TimeSessionSource {
+  TIMER
+  MANUAL
+}
+
+enum ActiveTimerStatus {
+  RUNNING
+  PAUSED
+}
+
+enum ActivityLogType {
+  CREATED
+  ASSIGNED
+  STATUS_CHANGED
+  TIMER_STARTED
+  TIMER_PAUSED
+  TIMER_RESUMED
+  TIMER_STOPPED
+  MANUAL_TIME_ADDED
+  UPDATED
+}
+
+model Department {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name         String    @unique
+  head_user_id String?   @unique @db.Uuid
+  head_user    User?     @relation("DepartmentHead", fields: [head_user_id], references: [id], onDelete: SetNull)
+  members      User[]    @relation("DepartmentMembers")
+  created_at   DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at   DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@map("departments")
+}
+
+model User {
+  id                   String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name                 String
+  username             String    @unique
+  password_hash        String
+  role                 UserRole
+  department_id        String?   @db.Uuid
+  department           Department? @relation("DepartmentMembers", fields: [department_id], references: [id], onDelete: SetNull)
+  title                String
+  is_active            Boolean   @default(true)
+  must_change_password Boolean   @default(false)
+  created_at           DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at           DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+
+  headed_department          Department?              @relation("DepartmentHead")
+  created_tickets            Ticket[]                 @relation("CreatedBy")
+  requested_tickets          Ticket[]                 @relation("RequestedBy")
+  assigned_tickets           Ticket[]                 @relation("AssignedTo")
+  time_sessions              TimeSession[]
+  active_timer               ActiveTimer?
+  activity_logs              ActivityLog[]
+  capacity_overrides         UserCapacityOverride[]   @relation("UserCapacity")
+  updated_capacity_overrides UserCapacityOverride[]   @relation("CapacityUpdater")
+  refresh_tokens             RefreshToken[]
+
+  @@map("users")
+}
+
+model Ticket {
+  id                   String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ticket_number        String               @unique
+  title                String
+  description          String?
+  created_by           String               @db.Uuid
+  requested_by         String               @db.Uuid
+  assigned_to          String               @db.Uuid
+  creator              User                 @relation("CreatedBy", fields: [created_by], references: [id], onDelete: Restrict)
+  requester            User                 @relation("RequestedBy", fields: [requested_by], references: [id], onDelete: Restrict)
+  assignee             User                 @relation("AssignedTo", fields: [assigned_to], references: [id], onDelete: Restrict)
+  priority             TicketPriority
+  status               TicketStatus
+  stuck_reason         String?
+  estimated_minutes    Int
+  due_date             DateTime             @db.Timestamptz(6)
+  recurrence_group_id  String?              @db.Uuid
+  recurrence_frequency RecurrenceFrequency?
+  series_label         String?
+  cluster_type         ClusterType          @default(DAILY)
+  cluster_name         String?
+  created_at           DateTime             @default(now()) @db.Timestamptz(6)
+  updated_at           DateTime             @default(now()) @updatedAt @db.Timestamptz(6)
+
+  time_sessions        TimeSession[]
+  active_timers        ActiveTimer[]
+  activity_logs        ActivityLog[]
+
+  @@index([assigned_to])
+  @@index([created_by])
+  @@index([status])
+  @@index([due_date])
+  @@index([recurrence_group_id])
+  @@index([cluster_type, cluster_name])
+  @@map("tickets")
+}
+
+model TimeSession {
+  id               String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ticket_id        String            @db.Uuid
+  user_id          String            @db.Uuid
+  ticket           Ticket            @relation(fields: [ticket_id], references: [id], onDelete: Cascade)
+  user             User              @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  started_at       DateTime          @db.Timestamptz(6)
+  ended_at         DateTime?         @db.Timestamptz(6)
+  duration_minutes Int               @default(0)
+  source           TimeSessionSource
+  manual_reason    String?
+
+  active_in_timers ActiveTimer[]
+
+  @@index([ticket_id])
+  @@index([user_id, started_at])
+  @@map("time_sessions")
+}
+
+model ActiveTimer {
+  user_id           String            @id @db.Uuid
+  ticket_id         String            @db.Uuid
+  status            ActiveTimerStatus
+  active_session_id String?           @db.Uuid
+  created_at        DateTime          @default(now()) @db.Timestamptz(6)
+  updated_at        DateTime          @default(now()) @updatedAt @db.Timestamptz(6)
+
+  user              User              @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  ticket            Ticket            @relation(fields: [ticket_id], references: [id], onDelete: Cascade)
+  active_session    TimeSession?      @relation(fields: [active_session_id], references: [id], onDelete: SetNull)
+
+  @@map("active_timers")
+}
+
+model ActivityLog {
+  id          String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ticket_id   String          @db.Uuid
+  user_id     String          @db.Uuid
+  ticket      Ticket          @relation(fields: [ticket_id], references: [id], onDelete: Cascade)
+  user        User            @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  type        ActivityLogType
+  description String
+  created_at  DateTime        @default(now()) @db.Timestamptz(6)
+
+  @@index([ticket_id, created_at(sort: Desc)])
+  @@map("activity_logs")
+}
+
+model UserCapacityOverride {
+  user_id         String   @db.Uuid
+  week_start_date DateTime @db.Date
+  raw_text        String
+  minutes         Int
+  updated_by      String   @db.Uuid
+  updated_at      DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  user            User     @relation("UserCapacity", fields: [user_id], references: [id], onDelete: Cascade)
+  updater         User     @relation("CapacityUpdater", fields: [updated_by], references: [id], onDelete: Restrict)
+
+  @@id([user_id, week_start_date])
+  @@map("user_capacity_overrides")
+}
+
+model RefreshToken {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id    String   @db.Uuid
+  user       User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  token_hash String   @unique
+  expires_at DateTime @db.Timestamptz(6)
+  revoked    Boolean  @default(false)
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([user_id])
+  @@map("refresh_tokens")
+}

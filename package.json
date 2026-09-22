@@ -1,0 +1,21 @@
+{
+  "name": "bbg-app",
+  "version": "1.0.0",
+  "private": true,
+  "description": "BBG Group Work Management & Burnout Tracker System",
+  "workspaces": [
+    "server",
+    "client"
+  ],
+  "scripts": {
+    "dev": "npm run dev --prefix server & npm run dev --prefix client",
+    "dev:server": "npm run dev --prefix server",
+    "dev:client": "npm run dev --prefix client",
+    "db:migrate": "npm run db:migrate --prefix server",
+    "db:seed": "npm run db:seed --prefix server",
+    "db:studio": "npm run db:studio --prefix server"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}
