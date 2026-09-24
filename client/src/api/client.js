@@ -96,3 +96,5 @@ export async function request(endpoint, options = {}) {
     throw err;
   }
 }
+
+export default request;

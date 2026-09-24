@@ -1,13 +1,17 @@
 <script setup>
-import { computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
+import { useTimerStore } from '@/stores/timer';
 import RoleBadge from '@/components/common/RoleBadge.vue';
-import { LogOut, Timer, Building2, User } from 'lucide-vue-next';
+import ChangePasswordModal from '@/components/auth/ChangePasswordModal.vue';
+import { LogOut, Timer, Building2, User, KeyRound } from 'lucide-vue-next';
 
 const router = useRouter();
 const authStore = useAuthStore();
+const timerStore = useTimerStore();
 
+const showChangePasswordModal = ref(false);
 const user = computed(() => authStore.user);
 
 const userInitials = computed(() => {
@@ -19,6 +23,18 @@ const userInitials = computed(() => {
     .join('')
     .toUpperCase();
 });
+
+onMounted(() => {
+  if (authStore.isAuthenticated) {
+    timerStore.fetchActive();
+  }
+});
+
+function goToActiveTicket() {
+  if (timerStore.activeTimer?.ticketId) {
+    router.push(`/tickets/${timerStore.activeTimer.ticketId}`);
+  }
+}
 
 async function handleLogout() {
   await authStore.logout();
@@ -38,14 +54,30 @@ async function handleLogout() {
     </div>
 
     <div class="topbar-right">
-      <!-- Active Timer Widget (Widget Shell for Prompt 2) -->
-      <div class="timer-widget-shell" title="Active Timer (Prompt 2)">
+      <!-- Active Timer Widget -->
+      <div
+        class="timer-widget-shell"
+        :class="{
+          'timer-running': timerStore.isRunning,
+          'timer-paused': timerStore.isPaused,
+          'clickable': timerStore.hasActiveTimer
+        }"
+        :title="timerStore.hasActiveTimer ? `Click to view ${timerStore.activeTimer.ticketNumber || 'ticket'}` : 'No active timer'"
+        @click="goToActiveTicket"
+      >
         <div class="timer-icon-wrap">
           <Timer :size="16" class="timer-icon" />
         </div>
         <div class="timer-info">
-          <span class="timer-status">Timer</span>
-          <span class="timer-elapsed">IDLE</span>
+          <span v-if="timerStore.hasActiveTimer" class="timer-ticket-num">
+            {{ timerStore.activeTimer.ticketNumber }}
+          </span>
+          <span class="timer-status">
+            {{ timerStore.isRunning ? 'RUNNING' : (timerStore.isPaused ? 'PAUSED' : 'IDLE') }}
+          </span>
+          <span class="timer-elapsed">
+            {{ timerStore.hasActiveTimer ? timerStore.elapsedFormatted : '--:--:--' }}
+          </span>
         </div>
       </div>
 
@@ -75,6 +107,15 @@ async function handleLogout() {
         </div>
 
         <button
+          class="btn btn-password"
+          title="Ganti Password Akun"
+          @click="showChangePasswordModal = true"
+        >
+          <KeyRound :size="15" />
+          <span class="password-text">Password</span>
+        </button>
+
+        <button
           id="btn-logout"
           class="btn btn-logout"
           title="Sign out of your BBG account"
@@ -86,16 +127,21 @@ async function handleLogout() {
         </button>
       </div>
     </div>
+
+    <!-- Self-Service Change Password Modal -->
+    <ChangePasswordModal
+      :show="showChangePasswordModal"
+      @close="showChangePasswordModal = false"
+    />
   </header>
 </template>
 
 <style scoped>
 .topbar {
   height: 64px;
-  background: rgba(17, 24, 39, 0.75);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: #ffffff;
   border-bottom: 1px solid var(--border-subtle);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -118,8 +164,9 @@ async function handleLogout() {
 }
 
 .org-tag {
-  color: var(--text-muted);
-  font-weight: 500;
+  color: var(--bsi-teal);
+  font-weight: 700;
+  letter-spacing: 0.02em;
 }
 
 .separator {
@@ -142,16 +189,60 @@ async function handleLogout() {
   display: flex;
   align-items: center;
   gap: 0.6rem;
-  background: rgba(26, 34, 52, 0.6);
+  background: #f8fafc;
   border: 1px solid var(--border-subtle);
   padding: 0.35rem 0.75rem;
   border-radius: var(--radius-full);
   font-size: 0.75rem;
   color: var(--text-secondary);
+  transition: all 0.2s ease;
+}
+
+.timer-widget-shell.clickable {
+  cursor: pointer;
+}
+.timer-widget-shell.clickable:hover {
+  background: #f1f5f9;
+  border-color: var(--border-medium);
+}
+
+.timer-widget-shell.timer-running {
+  background: var(--bsi-teal-light);
+  border-color: rgba(0, 160, 160, 0.35);
+}
+.timer-widget-shell.timer-running .timer-icon-wrap {
+  color: var(--bsi-teal);
+  animation: pulse-icon 1.5s ease-in-out infinite;
+}
+.timer-widget-shell.timer-running .timer-status {
+  color: var(--bsi-teal-dark);
+  font-weight: 700;
+}
+.timer-widget-shell.timer-running .timer-elapsed {
+  color: var(--bsi-teal-dark);
+}
+
+.timer-widget-shell.timer-paused {
+  background: var(--bsi-gold-light);
+  border-color: rgba(240, 180, 60, 0.4);
+}
+.timer-widget-shell.timer-paused .timer-icon-wrap {
+  color: var(--bsi-gold-dark);
+}
+.timer-widget-shell.timer-paused .timer-status {
+  color: var(--bsi-gold-dark);
+}
+.timer-widget-shell.timer-paused .timer-elapsed {
+  color: var(--bsi-gold-dark);
+}
+
+@keyframes pulse-icon {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.15); }
 }
 
 .timer-icon-wrap {
-  color: var(--accent-cyan);
+  color: var(--bsi-teal);
   display: flex;
   align-items: center;
 }
@@ -159,7 +250,13 @@ async function handleLogout() {
 .timer-info {
   display: flex;
   align-items: center;
-  gap: 0.35rem;
+  gap: 0.45rem;
+}
+
+.timer-ticket-num {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: var(--bsi-teal-dark);
 }
 
 .timer-status {
@@ -185,14 +282,14 @@ async function handleLogout() {
   width: 36px;
   height: 36px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #0284c7 0%, #6366f1 100%);
+  background: linear-gradient(135deg, #00a0a0 0%, #f0b43c 100%);
   color: #ffffff;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 0.8rem;
   font-weight: 700;
-  box-shadow: 0 0 12px rgba(2, 132, 199, 0.3);
+  box-shadow: 0 2px 8px rgba(0, 160, 160, 0.25);
   flex-shrink: 0;
 }
 
@@ -236,24 +333,48 @@ async function handleLogout() {
   color: var(--text-muted);
 }
 
-.btn-logout {
-  background: rgba(244, 63, 94, 0.08);
-  border: 1px solid rgba(244, 63, 94, 0.2);
-  color: #fb7185;
+.btn-password {
+  background: var(--bsi-teal-light);
+  border: 1px solid rgba(0, 160, 160, 0.25);
+  color: var(--bsi-teal-dark);
   padding: 0.4rem 0.75rem;
   font-size: 0.8rem;
   border-radius: var(--radius-md);
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  transition: all 0.2s ease;
+}
+
+.btn-password:hover {
+  background: rgba(0, 160, 160, 0.16);
+  border-color: rgba(0, 160, 160, 0.4);
+  color: #004d4d;
+}
+
+.btn-logout {
+  background: rgba(244, 63, 94, 0.08);
+  border: 1px solid rgba(244, 63, 94, 0.2);
+  color: #e11d48;
+  padding: 0.4rem 0.75rem;
+  font-size: 0.8rem;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
   transition: all 0.2s ease;
 }
 
 .btn-logout:hover:not(:disabled) {
-  background: rgba(244, 63, 94, 0.18);
-  border-color: rgba(244, 63, 94, 0.4);
-  color: #ffffff;
+  background: rgba(244, 63, 94, 0.15);
+  border-color: rgba(244, 63, 94, 0.35);
+  color: #be123c;
 }
 
 @media (max-width: 768px) {
+  .password-text,
   .logout-text {
     display: none;
   }

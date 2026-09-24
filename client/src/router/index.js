@@ -5,6 +5,8 @@ import LoginView from '@/views/LoginView.vue';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import DashboardView from '@/views/DashboardView.vue';
 import TicketsView from '@/views/TicketsView.vue';
+import NewTicketView from '@/views/NewTicketView.vue';
+import TicketDetailView from '@/views/TicketDetailView.vue';
 import MyWorkView from '@/views/MyWorkView.vue';
 import BurnoutTrackerView from '@/views/BurnoutTrackerView.vue';
 import ReportsView from '@/views/ReportsView.vue';
@@ -37,6 +39,18 @@ const routes = [
         name: 'tickets',
         component: TicketsView,
         meta: { title: 'Tickets', roles: ['HEAD_GROUP', 'DEPARTMENT_HEAD', 'MEMBER'] }
+      },
+      {
+        path: 'tickets/new',
+        name: 'new-ticket',
+        component: NewTicketView,
+        meta: { title: 'New Ticket', roles: ['HEAD_GROUP', 'DEPARTMENT_HEAD', 'MEMBER'] }
+      },
+      {
+        path: 'tickets/:id',
+        name: 'ticket-detail',
+        component: TicketDetailView,
+        meta: { title: 'Ticket Detail', roles: ['HEAD_GROUP', 'DEPARTMENT_HEAD', 'MEMBER'] }
       },
       {
         path: 'my-work',

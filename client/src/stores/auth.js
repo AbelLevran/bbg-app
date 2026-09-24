@@ -20,6 +20,10 @@ export const useAuthStore = defineStore('auth', () => {
     user.value = userData;
   }
 
+  function updateUser(userData) {
+    user.value = { ...user.value, ...userData };
+  }
+
   function clearAuth() {
     accessToken.value = null;
     user.value = null;
@@ -75,6 +79,7 @@ export const useAuthStore = defineStore('auth', () => {
     isMember,
     departmentName,
     setAuth,
+    updateUser,
     clearAuth,
     login,
     logout,

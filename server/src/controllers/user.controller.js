@@ -18,3 +18,18 @@ export async function resetPassword(req, res, next) {
     next(error);
   }
 }
+
+export async function getEmployeeDetail(req, res, next) {
+  try {
+    const { id } = req.params;
+    const weekDate = req.query.week;
+    const data = await userService.getEmployeeDetail({ userId: id, weekDate });
+    res.json({
+      success: true,
+      ...data
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+

@@ -123,7 +123,7 @@ function isActive(itemPath) {
 .sidebar {
   width: 260px;
   min-height: 100vh;
-  background: var(--bg-surface);
+  background: #ffffff;
   border-right: 1px solid var(--border-subtle);
   display: flex;
   flex-direction: column;
@@ -131,6 +131,7 @@ function isActive(itemPath) {
   position: sticky;
   top: 0;
   height: 100vh;
+  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.02);
 }
 
 .sidebar-brand {
@@ -145,12 +146,17 @@ function isActive(itemPath) {
   width: 38px;
   height: 38px;
   border-radius: var(--radius-md);
-  background: linear-gradient(135deg, #0284c7 0%, #38bdf8 100%);
+  background: linear-gradient(135deg, #00a0a0 0%, #008787 100%);
   display: flex;
   align-items: center;
   justify-content: center;
   color: #ffffff;
-  box-shadow: 0 0 16px rgba(2, 132, 199, 0.4);
+  box-shadow: 0 4px 12px rgba(0, 160, 160, 0.3);
+  border: 1px solid rgba(240, 180, 60, 0.4);
+}
+
+.brand-icon {
+  color: #ffffff;
 }
 
 .brand-text {
@@ -167,8 +173,8 @@ function isActive(itemPath) {
 
 .brand-subtitle {
   font-size: 0.7rem;
-  color: var(--text-muted);
-  font-weight: 500;
+  color: var(--bsi-teal-dark, #006f6f);
+  font-weight: 600;
 }
 
 .sidebar-nav {
@@ -208,15 +214,16 @@ function isActive(itemPath) {
 }
 
 .nav-link:hover {
-  background: rgba(255, 255, 255, 0.04);
-  color: var(--text-primary);
+  background: #f8fafc;
+  color: var(--bsi-teal-dark, #006f6f);
 }
 
 .nav-link.active {
-  background: rgba(2, 132, 199, 0.12);
-  border-color: rgba(56, 189, 248, 0.25);
-  color: #38bdf8;
-  box-shadow: 0 2px 12px rgba(2, 132, 199, 0.15);
+  background: var(--bsi-teal-light, #e6f6f6);
+  border-color: rgba(0, 160, 160, 0.25);
+  color: #007777;
+  font-weight: 700;
+  box-shadow: 0 1px 4px rgba(0, 160, 160, 0.08);
 }
 
 .nav-icon {
@@ -232,7 +239,7 @@ function isActive(itemPath) {
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  background: var(--bg-surface-elevated);
+  background: var(--bg-surface-elevated, #f8fafc);
   padding: 0.75rem 0.85rem;
   border-radius: var(--radius-md);
   border: 1px solid var(--border-subtle);
@@ -242,8 +249,8 @@ function isActive(itemPath) {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--accent-emerald);
-  box-shadow: 0 0 8px rgba(16, 185, 129, 0.6);
+  background: var(--bsi-gold, #f0b43c);
+  box-shadow: 0 0 8px rgba(240, 180, 60, 0.6);
 }
 
 .org-details {

@@ -1,40 +1,70 @@
-/* Modern CSS Design System for BBG System */
+/* Bank Syariah Indonesia (BSI) Light Design System for BBG Management System */
 :root {
-  --bg-app: #0b0f17;
-  --bg-surface: #111827;
-  --bg-surface-elevated: #1a2234;
-  --bg-surface-hover: #222d42;
-  --border-subtle: rgba(255, 255, 255, 0.08);
-  --border-medium: rgba(255, 255, 255, 0.14);
-  --border-focus: #38bdf8;
+  /* BSI Signature Palette */
+  --bsi-teal: #00a0a0;        /* Pleasant Stream */
+  --bsi-teal-hover: #008787;
+  --bsi-teal-dark: #006f6f;
+  --bsi-teal-light: #e6f6f6;
+  --bsi-teal-subtle: rgba(0, 160, 160, 0.08);
 
-  --text-primary: #f8fafc;
-  --text-secondary: #94a3b8;
+  --bsi-gold: #f0b43c;        /* Dairy Made */
+  --bsi-gold-hover: #dba02e;
+  --bsi-gold-dark: #c48b1e;
+  --bsi-gold-light: #fef7e9;
+  --bsi-gold-subtle: rgba(240, 180, 60, 0.12);
+
+  /* Light Corporate Backgrounds */
+  --bg-app: #f4f7f9;
+  --bg-surface: #ffffff;
+  --bg-surface-elevated: #f8fafc;
+  --bg-surface-hover: #f1f5f9;
+  --bg-card: #ffffff;
+  --bg-subtle: #f8fafc;
+
+  /* Crisp Light Borders */
+  --border-subtle: #e2e8f0;
+  --border-color: #e2e8f0;
+  --border-medium: #cbd5e1;
+  --border-focus: #00a0a0;
+
+  /* Typography Colors */
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
   --text-muted: #64748b;
+  --text-subtle: #94a3b8;
 
-  --brand-primary: #0284c7;
-  --brand-primary-hover: #0369a1;
-  --brand-glow: rgba(56, 189, 248, 0.25);
+  /* Brand Tokens */
+  --brand-primary: #00a0a0;
+  --brand-primary-hover: #008787;
+  --brand-glow: rgba(0, 160, 160, 0.25);
+  --primary-color: #00a0a0;
+  --primary-hover: #008787;
 
-  --accent-cyan: #06b6d4;
-  --accent-indigo: #6366f1;
-  --accent-purple: #a855f7;
+  /* Functional Accents */
+  --accent-cyan: #00a0a0;
+  --accent-gold: #f0b43c;
+  --accent-amber: #f0b43c;
   --accent-emerald: #10b981;
-  --accent-amber: #f59e0b;
   --accent-rose: #f43f5e;
+  --accent-indigo: #00a0a0;
+  --accent-purple: #8b5cf6;
 
+  /* Typography */
   --font-sans: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
 
+  /* Radii */
   --radius-sm: 6px;
   --radius-md: 10px;
-  --radius-lg: 16px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
   --radius-full: 9999px;
 
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
-  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.5);
-  --shadow-glow: 0 0 24px var(--brand-glow);
+  /* Shadows */
+  --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px -1px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.06), 0 2px 4px -2px rgba(0, 0, 0, 0.04);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.03);
+  --shadow-glow: 0 0 20px rgba(0, 160, 160, 0.18);
 }
 
 * {
@@ -87,13 +117,13 @@ body {
 }
 
 .btn-primary {
-  background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+  background: linear-gradient(135deg, #00a0a0 0%, #008787 100%);
   color: #ffffff;
-  box-shadow: 0 2px 8px rgba(2, 132, 199, 0.35);
+  box-shadow: 0 2px 8px rgba(0, 160, 160, 0.25);
 }
 .btn-primary:hover:not(:disabled) {
-  background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
-  box-shadow: 0 4px 16px rgba(14, 165, 233, 0.45);
+  background: linear-gradient(135deg, #00b5b5 0%, #00a0a0 100%);
+  box-shadow: 0 4px 14px rgba(0, 160, 160, 0.35);
   transform: translateY(-1px);
 }
 .btn-primary:active:not(:disabled) {
@@ -105,14 +135,15 @@ body {
 }
 
 .btn-secondary {
-  background-color: var(--bg-surface-elevated);
-  border-color: var(--border-subtle);
+  background-color: #ffffff;
+  border: 1px solid var(--border-subtle);
   color: var(--text-primary);
+  box-shadow: var(--shadow-sm);
 }
 .btn-secondary:hover:not(:disabled) {
-  background-color: var(--bg-surface-hover);
+  background-color: var(--bg-surface-elevated);
   border-color: var(--border-medium);
-  color: #ffffff;
+  color: var(--bsi-teal-dark);
 }
 
 .btn-ghost {
@@ -120,15 +151,15 @@ body {
   color: var(--text-secondary);
 }
 .btn-ghost:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.06);
-  color: var(--text-primary);
+  background: rgba(0, 160, 160, 0.08);
+  color: var(--bsi-teal-dark);
 }
 
 /* Input styles */
 .input-field {
   width: 100%;
   padding: 0.65rem 0.875rem;
-  background-color: var(--bg-surface);
+  background-color: #ffffff;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
   color: var(--text-primary);
@@ -138,35 +169,33 @@ body {
 }
 .input-field:focus {
   outline: none;
-  border-color: var(--border-focus);
-  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.18);
-  background-color: var(--bg-surface-elevated);
+  border-color: var(--bsi-teal);
+  box-shadow: 0 0 0 3px rgba(0, 160, 160, 0.15);
+  background-color: #ffffff;
 }
 .input-field::placeholder {
   color: var(--text-muted);
 }
 
-/* Glass Card */
+/* Crisp White Corporate Card */
 .glass-card {
-  background: rgba(17, 24, 39, 0.7);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: #ffffff;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
   padding: 1.5rem;
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-sm);
 }
 
 /* Disclaimer box */
 .disclaimer-banner {
-  background: rgba(14, 165, 233, 0.08);
-  border: 1px solid rgba(14, 165, 233, 0.2);
+  background: var(--bsi-teal-light);
+  border: 1px solid rgba(0, 160, 160, 0.25);
   border-radius: var(--radius-md);
   padding: 0.875rem 1rem;
   display: flex;
   align-items: flex-start;
   gap: 0.75rem;
-  color: #bae6fd;
+  color: var(--bsi-teal-dark);
   font-size: 0.825rem;
   line-height: 1.45;
 }
@@ -184,17 +213,17 @@ body {
   letter-spacing: 0.03em;
 }
 .badge-head-group {
-  background: rgba(168, 85, 247, 0.15);
-  color: #d8b4fe;
-  border: 1px solid rgba(168, 85, 247, 0.3);
+  background: rgba(240, 180, 60, 0.15);
+  color: #b47806;
+  border: 1px solid rgba(240, 180, 60, 0.4);
 }
 .badge-dept-head {
-  background: rgba(14, 165, 233, 0.15);
-  color: #7dd3fc;
-  border: 1px solid rgba(14, 165, 233, 0.3);
+  background: var(--bsi-teal-light);
+  color: var(--bsi-teal-dark);
+  border: 1px solid rgba(0, 160, 160, 0.35);
 }
 .badge-member {
-  background: rgba(16, 185, 129, 0.15);
-  color: #6ee7b7;
-  border: 1px solid rgba(16, 185, 129, 0.3);
+  background: #f0fdf4;
+  color: #15803d;
+  border: 1px solid #bbf7d0;
 }

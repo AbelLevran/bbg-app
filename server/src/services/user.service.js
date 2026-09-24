@@ -62,3 +62,54 @@ export async function resetPassword({ targetUserId, requesterUser }) {
     user: formatUser(updatedUser)
   };
 }
+
+import { getUserWorkload, getUserWeeklyTrend } from './workload.service.js';
+
+export async function getEmployeeDetail({ userId, weekDate }) {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    include: {
+      department: {
+        select: { id: true, name: true }
+      }
+    }
+  });
+
+  if (!user || !user.is_active) {
+    const error = new Error('Employee not found or inactive');
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const week = weekDate || new Date().toISOString().slice(0, 10);
+  const currentWorkload = await getUserWorkload(userId, week);
+  const weeklyTrend = await getUserWeeklyTrend(userId, week, 4);
+
+  // Ticket status breakdown
+  const statusGroups = await prisma.ticket.groupBy({
+    by: ['status'],
+    where: { assigned_to: userId },
+    _count: { _all: true }
+  });
+
+  const statusMap = {
+    TODO: 0,
+    IN_PROGRESS: 0,
+    IN_REVIEW: 0,
+    STUCK: 0,
+    DONE: 0,
+    CANCELLED: 0
+  };
+  for (const g of statusGroups) {
+    statusMap[g.status] = g._count._all;
+  }
+
+  return {
+    user: formatUser(user),
+    week,
+    currentWorkload,
+    weeklyTrend,
+    statusCounts: statusMap
+  };
+}
+

@@ -21,4 +21,12 @@ router.post(
   userController.resetPassword
 );
 
+import { setCapacityHandler } from '../controllers/workload.controller.js';
+
+// User capacity override per prd.md §3.6 (self / own dept head / head group)
+router.put('/:userId/capacity', authenticate, setCapacityHandler);
+
+// Employee Detail profile per prd.md §4.8
+router.get('/:id', authenticate, userController.getEmployeeDetail);
+
 export default router;

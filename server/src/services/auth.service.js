@@ -1,5 +1,5 @@
 import prisma from '../db/prisma.js';
-import { comparePassword } from '../utils/password.js';
+import { comparePassword, hashPassword } from '../utils/password.js';
 import { signAccessToken, signRefreshToken, verifyRefreshToken, hashToken } from '../utils/jwt.js';
 
 export function formatUser(user) {
@@ -165,3 +165,52 @@ export async function getMe(userId) {
 
   return formatUser(user);
 }
+
+export async function changePassword({ userId, currentPassword, newPassword }) {
+  if (!currentPassword || !newPassword) {
+    const error = new Error('Both current and new password are required');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (newPassword.length < 6) {
+    const error = new Error('New password must be at least 6 characters long');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: userId }
+  });
+
+  if (!user || !user.is_active) {
+    const error = new Error('User not found or inactive');
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const isMatch = await comparePassword(currentPassword, user.password_hash);
+  if (!isMatch) {
+    const error = new Error('Current password does not match');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const passwordHash = await hashPassword(newPassword);
+
+  const updatedUser = await prisma.user.update({
+    where: { id: userId },
+    data: {
+      password_hash: passwordHash,
+      must_change_password: false
+    },
+    include: {
+      department: {
+        select: { id: true, name: true }
+      }
+    }
+  });
+
+  return formatUser(updatedUser);
+}
+

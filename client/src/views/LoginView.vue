@@ -11,7 +11,7 @@ const authStore = useAuthStore();
 const username = ref('');
 const password = ref('');
 const errorMessage = ref('');
-const showQuickPicker = ref(true);
+const showQuickPicker = ref(false);
 
 const quickUsers = [
   { username: 'ahmad', name: 'Ahmad Fauzi', role: 'HEAD_GROUP', badge: 'Head Group', dept: 'Oversight' },
@@ -169,15 +169,15 @@ async function handleLogin() {
   border-radius: 50%;
   filter: blur(120px);
   pointer-events: none;
-  opacity: 0.15;
+  opacity: 0.12;
 }
 .glow-orb-1 {
-  background: #0284c7;
+  background: #00a0a0;
   top: -100px;
   left: -100px;
 }
 .glow-orb-2 {
-  background: #6366f1;
+  background: #f0b43c;
   bottom: -100px;
   right: -100px;
 }
@@ -195,15 +195,16 @@ async function handleLogin() {
 }
 
 .brand-badge {
-  width: 54px;
-  height: 54px;
-  border-radius: 14px;
-  background: linear-gradient(135deg, #0284c7 0%, #38bdf8 100%);
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #00a0a0 0%, #008787 100%);
+  border: 2px solid rgba(240, 180, 60, 0.4);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   color: #ffffff;
-  box-shadow: 0 0 24px rgba(2, 132, 199, 0.4);
+  box-shadow: 0 4px 16px rgba(0, 160, 160, 0.25);
   margin-bottom: 1rem;
 }
 
@@ -319,7 +320,7 @@ async function handleLogin() {
 }
 
 .toggle-text {
-  color: var(--brand-primary);
+  color: var(--bsi-teal);
   font-weight: 600;
 }
 
@@ -349,8 +350,8 @@ async function handleLogin() {
 }
 
 .quick-user-btn.active {
-  border-color: var(--brand-primary);
-  background: rgba(2, 132, 199, 0.15);
+  border-color: var(--bsi-teal);
+  background: var(--bsi-teal-light);
 }
 
 .quick-user-top {
@@ -374,16 +375,16 @@ async function handleLogin() {
 }
 
 .pill-head_group {
-  background: rgba(168, 85, 247, 0.2);
-  color: #d8b4fe;
+  background: rgba(240, 180, 60, 0.15);
+  color: #b47806;
 }
 .pill-department_head {
-  background: rgba(14, 165, 233, 0.2);
-  color: #7dd3fc;
+  background: var(--bsi-teal-light);
+  color: var(--bsi-teal-dark);
 }
 .pill-member {
-  background: rgba(16, 185, 129, 0.2);
-  color: #6ee7b7;
+  background: #f0fdf4;
+  color: #15803d;
 }
 
 .quick-user-bottom {
