@@ -692,18 +692,40 @@ async function exportCsv() {
   .view-header {
     flex-direction: column;
     align-items: flex-start;
+    gap: 1rem;
   }
   .header-actions {
     width: 100%;
     flex-direction: column;
     align-items: stretch;
+    gap: 0.75rem;
   }
   .controls-card {
     flex-direction: column;
     align-items: stretch;
+    padding: 1rem;
+    gap: 0.75rem;
+  }
+  .tabs-wrap {
+    width: 100%;
+    display: flex;
+  }
+  .tab-pill {
+    flex: 1;
+    justify-content: center;
+    padding: 0.5rem 0.5rem;
+    font-size: 0.78rem;
   }
   .search-wrap {
     min-width: 100%;
+  }
+  .table-container {
+    padding: 1.15rem 1rem;
+  }
+  .table-header-meta {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
   }
 }
 </style>

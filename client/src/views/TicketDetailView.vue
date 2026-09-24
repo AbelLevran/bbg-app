@@ -1040,4 +1040,48 @@ function formatMinutes(m) {
   resize: vertical;
   min-height: 80px;
 }
+
+@media (max-width: 640px) {
+  .ticket-detail-view {
+    padding: 0.5rem 0 3rem;
+    gap: 1.25rem;
+  }
+
+  .ticket-header-card {
+    padding: 1.25rem 1rem;
+    gap: 1rem;
+  }
+
+  .header-top {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.75rem;
+  }
+
+  .header-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  .card {
+    padding: 1.25rem 1rem;
+    gap: 1rem;
+  }
+
+  .meta-grid {
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+  }
+
+  .status-choices {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.5rem;
+  }
+
+  .form-row {
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+}
 </style>

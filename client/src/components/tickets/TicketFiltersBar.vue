@@ -181,4 +181,30 @@ function reset() {
   transition: all 0.15s ease;
 }
 .btn-reset:hover { border-color: var(--bsi-teal); color: var(--bsi-teal-dark); background: var(--bsi-teal-light); }
+
+@media (max-width: 640px) {
+  .filters-bar {
+    padding: 0.75rem;
+    gap: 0.5rem;
+  }
+
+  .search-wrap {
+    width: 100%;
+  }
+
+  .search-input {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .filter-select {
+    flex: 1 1 calc(50% - 0.35rem);
+    min-width: 120px;
+  }
+
+  .overdue-toggle {
+    flex: 1;
+    justify-content: center;
+  }
+}
 </style>

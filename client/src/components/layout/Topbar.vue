@@ -5,7 +5,9 @@ import { useAuthStore } from '@/stores/auth';
 import { useTimerStore } from '@/stores/timer';
 import RoleBadge from '@/components/common/RoleBadge.vue';
 import ChangePasswordModal from '@/components/auth/ChangePasswordModal.vue';
-import { LogOut, Timer, Building2, User, KeyRound } from 'lucide-vue-next';
+import { LogOut, Timer, Building2, User, KeyRound, Menu } from 'lucide-vue-next';
+
+const emit = defineEmits(['toggleMenu']);
 
 const router = useRouter();
 const authStore = useAuthStore();
@@ -45,9 +47,18 @@ async function handleLogout() {
 <template>
   <header class="topbar">
     <div class="topbar-left">
+      <button
+        class="mobile-toggle-btn"
+        title="Open navigation menu"
+        aria-label="Open navigation menu"
+        @click="emit('toggleMenu')"
+      >
+        <Menu :size="19" />
+      </button>
+
       <!-- Breadcrumb / Active Context -->
       <div class="context-indicator">
-        <span class="org-tag">BBG System</span>
+        <span class="org-tag">BBG</span>
         <span class="separator">/</span>
         <span class="active-title">{{ $route.meta.title || 'Overview' }}</span>
       </div>
@@ -373,13 +384,83 @@ async function handleLogout() {
   color: #be123c;
 }
 
+.mobile-toggle-btn {
+  display: none;
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  margin-right: 0.75rem;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.mobile-toggle-btn:hover {
+  background: #f1f5f9;
+  border-color: var(--border-medium);
+  color: var(--bsi-teal-dark);
+}
+
 @media (max-width: 768px) {
+  .topbar {
+    height: 56px;
+    padding: 0 0.85rem;
+  }
+
+  .mobile-toggle-btn {
+    display: inline-flex;
+  }
+
+  .org-tag,
+  .separator {
+    display: none;
+  }
+
+  .topbar-right {
+    gap: 0.45rem;
+  }
+
+  .user-profile-section {
+    padding-left: 0.45rem;
+    gap: 0.45rem;
+  }
+
+  .user-details {
+    display: none;
+  }
+
   .password-text,
   .logout-text {
     display: none;
   }
-  .user-subline {
+
+  .btn-password,
+  .btn-logout {
+    padding: 0.4rem 0.55rem;
+  }
+
+  .timer-widget-shell {
+    padding: 0.3rem 0.55rem;
+  }
+
+  .timer-ticket-num,
+  .timer-status {
     display: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .active-title {
+    max-width: 110px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 0.825rem;
   }
 }
 </style>

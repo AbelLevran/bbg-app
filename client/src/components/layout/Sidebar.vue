@@ -8,8 +8,18 @@ import {
   UserCheck,
   Activity,
   FileBarChart,
-  Layers
+  Layers,
+  X
 } from 'lucide-vue-next';
+
+defineProps({
+  isOpen: {
+    type: Boolean,
+    default: false
+  }
+});
+
+const emit = defineEmits(['close']);
 
 const route = useRoute();
 const authStore = useAuthStore();
@@ -77,16 +87,21 @@ function isActive(itemPath) {
 </script>
 
 <template>
-  <aside class="sidebar">
+  <aside class="sidebar" :class="{ 'mobile-open': isOpen }">
     <!-- Brand Header -->
     <div class="sidebar-brand">
-      <div class="brand-logo">
-        <Layers :size="22" class="brand-icon" />
+      <div class="brand-left">
+        <div class="brand-logo">
+          <Layers :size="22" class="brand-icon" />
+        </div>
+        <div class="brand-text">
+          <span class="brand-name">BBG SYSTEM</span>
+          <span class="brand-subtitle">Work & Burnout Tracker</span>
+        </div>
       </div>
-      <div class="brand-text">
-        <span class="brand-name">BBG SYSTEM</span>
-        <span class="brand-subtitle">Work & Burnout Tracker</span>
-      </div>
+      <button class="mobile-close-btn" title="Close navigation" @click="emit('close')">
+        <X :size="20" />
+      </button>
     </div>
 
     <!-- Navigation Menu -->
@@ -98,6 +113,7 @@ function isActive(itemPath) {
             :to="item.path"
             :class="['nav-link', { active: isActive(item.path) }]"
             :id="`nav-link-${item.name}`"
+            @click="emit('close')"
           >
             <component :is="item.icon" :size="18" class="nav-icon" />
             <span class="nav-label">{{ item.label }}</span>
@@ -267,5 +283,59 @@ function isActive(itemPath) {
 .org-note {
   font-size: 0.7rem;
   color: var(--text-muted);
+}
+
+.mobile-close-btn {
+  display: none;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 0.4rem;
+  border-radius: var(--radius-md);
+  transition: all 0.15s ease;
+}
+
+.mobile-close-btn:hover {
+  background: #f1f5f9;
+  color: var(--text-primary);
+}
+
+@media (max-width: 768px) {
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 280px;
+    max-width: 85vw;
+    height: 100vh;
+    z-index: 200;
+    transform: translateX(-100%);
+    transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: none;
+  }
+
+  .sidebar.mobile-open {
+    transform: translateX(0);
+    box-shadow: 12px 0 32px rgba(15, 23, 42, 0.2);
+  }
+
+  .sidebar-brand {
+    justify-content: space-between;
+    padding: 1.15rem 1.25rem;
+  }
+
+  .brand-left {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .mobile-close-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
 }
 </style>

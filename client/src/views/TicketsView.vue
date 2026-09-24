@@ -501,4 +501,47 @@ function handleSelectEvent(name) {
   background: #f8fafc;
   border-top: 1px solid var(--border-color);
 }
+
+@media (max-width: 768px) {
+  .view-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 1rem;
+  }
+
+  .title-row {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .page-title {
+    font-size: 1.3rem;
+  }
+
+  .header-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .header-actions .btn-primary {
+    flex: 1;
+    justify-content: center;
+  }
+
+  .tabs-bar {
+    width: 100%;
+    display: flex;
+  }
+
+  .tab-btn {
+    flex: 1;
+    justify-content: center;
+    padding: 0.5rem 0.5rem;
+    font-size: 0.8rem;
+  }
+
+  .modal-card {
+    max-width: 95vw;
+  }
+}
 </style>

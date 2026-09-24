@@ -793,4 +793,42 @@ async function handleSubmit() {
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+@media (max-width: 640px) {
+  .new-ticket-page {
+    padding: 0.5rem 0 3rem;
+  }
+
+  .ticket-form-card {
+    padding: 1.25rem 1rem;
+    gap: 1.25rem;
+  }
+
+  .page-top {
+    margin-bottom: 1.25rem;
+  }
+
+  .form-actions {
+    flex-direction: column-reverse;
+    align-items: stretch;
+    gap: 0.75rem;
+  }
+
+  .form-actions .btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .priority-btn {
+    flex: 1;
+    justify-content: center;
+    padding: 0.5rem 0.25rem;
+    font-size: 0.775rem;
+  }
+
+  .preset-chip {
+    flex: 1 1 calc(33.333% - 0.4rem);
+    text-align: center;
+  }
+}
 </style>

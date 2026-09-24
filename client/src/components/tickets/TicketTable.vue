@@ -148,12 +148,15 @@ function SortIcon(field) {
 <style scoped>
 .table-wrapper {
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
   border-radius: var(--radius-lg);
   border: 1px solid var(--border-subtle);
+  width: 100%;
 }
 
 .ticket-table {
   width: 100%;
+  min-width: 780px;
   border-collapse: collapse;
   font-size: 0.825rem;
 }
