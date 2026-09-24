@@ -84,28 +84,41 @@ async function loadDashboardData() {
     const week = selectedWeek.value;
 
     if (authStore.isHeadGroup) {
-      // Load group data
-      groupData.value = await workloadStore.fetchGroupWorkload(week);
-      sustainedAlerts.value = await workloadStore.fetchAlerts(week);
-
-      // Load group 4-week trend (using Ahmad or average)
-      trendData.value = await workloadStore.fetchUserTrend(authStore.user.id, week, 4);
-      dailyData.value = await workloadStore.fetchUserDaily(authStore.user.id, week);
+      // Load group data concurrently in parallel
+      const [gData, alerts, trend, daily] = await Promise.all([
+        workloadStore.fetchGroupWorkload(week),
+        workloadStore.fetchAlerts(week),
+        workloadStore.fetchUserTrend(authStore.user.id, week, 4),
+        workloadStore.fetchUserDaily(authStore.user.id, week)
+      ]);
+      groupData.value = gData;
+      sustainedAlerts.value = alerts;
+      trendData.value = trend;
+      dailyData.value = daily;
     } else if (authStore.isDepartmentHead) {
-      // Load department data
+      // Load department data concurrently in parallel
       const deptId = authStore.user.departmentId;
-      deptData.value = await workloadStore.fetchDeptWorkload(deptId, week);
-      trendData.value = await workloadStore.fetchUserTrend(authStore.user.id, week, 4);
-      dailyData.value = await workloadStore.fetchUserDaily(authStore.user.id, week);
-      sustainedAlerts.value = await workloadStore.fetchAlerts(week);
+      const [dData, trend, daily, alerts] = await Promise.all([
+        workloadStore.fetchDeptWorkload(deptId, week),
+        workloadStore.fetchUserTrend(authStore.user.id, week, 4),
+        workloadStore.fetchUserDaily(authStore.user.id, week),
+        workloadStore.fetchAlerts(week)
+      ]);
+      deptData.value = dData;
+      trendData.value = trend;
+      dailyData.value = daily;
+      sustainedAlerts.value = alerts;
     } else {
-      // MEMBER: personal data
-      memberData.value = await workloadStore.fetchUserWorkload(authStore.user.id, week);
-      trendData.value = await workloadStore.fetchUserTrend(authStore.user.id, week, 4);
-      dailyData.value = await workloadStore.fetchUserDaily(authStore.user.id, week);
-
-      // Fetch active tickets for member
-      const tRes = await ticketsStore.fetchTickets();
+      // MEMBER: personal data concurrently in parallel
+      const [mData, trend, daily, _] = await Promise.all([
+        workloadStore.fetchUserWorkload(authStore.user.id, week),
+        workloadStore.fetchUserTrend(authStore.user.id, week, 4),
+        workloadStore.fetchUserDaily(authStore.user.id, week),
+        ticketsStore.fetchTickets()
+      ]);
+      memberData.value = mData;
+      trendData.value = trend;
+      dailyData.value = daily;
       memberActiveTickets.value = (ticketsStore.list || []).filter(t =>
         ['TODO', 'IN_PROGRESS', 'IN_REVIEW', 'STUCK'].includes(t.status)
       );

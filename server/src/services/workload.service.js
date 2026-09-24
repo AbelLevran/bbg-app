@@ -1,6 +1,26 @@
-import { PrismaClient } from '@prisma/client';
+import prisma from '../db/prisma.js';
 
-const prisma = new PrismaClient();
+// In-memory cache with 20s TTL to eliminate redundant remote DB round-trips
+const workloadCache = new Map();
+const CACHE_TTL_MS = 20000;
+
+export function clearWorkloadCache() {
+  workloadCache.clear();
+}
+
+function getFromCache(key) {
+  const item = workloadCache.get(key);
+  if (!item) return null;
+  if (Date.now() > item.expiresAt) {
+    workloadCache.delete(key);
+    return null;
+  }
+  return item.data;
+}
+
+function setToCache(key, data, ttlMs = CACHE_TTL_MS) {
+  workloadCache.set(key, { data, expiresAt: Date.now() + ttlMs });
+}
 
 /**
  * Parses free-text capacity input per prd.md §3.6
@@ -112,42 +132,58 @@ export async function getCapacityInfo(userId, weekDate) {
  * Core per-user workload block per design.md §4.
  */
 export async function getUserWorkload(userId, weekDate) {
+  const cacheKey = `user_${userId}_${weekStartDate(weekDate)}`;
+  const cached = getFromCache(cacheKey);
+  if (cached) return cached;
+
   const { start, end } = getWeekBounds(weekDate);
-  const capInfo = await getCapacityInfo(userId, weekDate);
+
+  // Run user capacity, planned sum, closed sessions sum, open session, active count, overdue count concurrently
+  const [capInfo, plannedResult, closedSessions, openSession, activeTicketCount, overdueTicketCount] = await Promise.all([
+    getCapacityInfo(userId, weekDate),
+    prisma.ticket.aggregate({
+      _sum: { estimated_minutes: true },
+      where: {
+        assigned_to: userId,
+        status: { not: 'CANCELLED' },
+        due_date: { gte: start, lte: end }
+      }
+    }),
+    prisma.timeSession.aggregate({
+      _sum: { duration_minutes: true },
+      where: {
+        user_id: userId,
+        started_at: { gte: start, lte: end },
+        ended_at: { not: null }
+      }
+    }),
+    prisma.timeSession.findFirst({
+      where: {
+        user_id: userId,
+        started_at: { gte: start, lte: end },
+        ended_at: null
+      }
+    }),
+    prisma.ticket.count({
+      where: {
+        assigned_to: userId,
+        status: { in: ['TODO', 'IN_PROGRESS', 'IN_REVIEW', 'STUCK'] }
+      }
+    }),
+    prisma.ticket.count({
+      where: {
+        assigned_to: userId,
+        due_date: { lt: new Date() },
+        status: { notIn: ['DONE', 'CANCELLED'] }
+      }
+    })
+  ]);
+
   const capacityMinutes = capInfo.minutes;
-
-  // Planned: tickets whose dueDate falls in this week, not CANCELLED
-  const plannedResult = await prisma.ticket.aggregate({
-    _sum: { estimated_minutes: true },
-    where: {
-      assigned_to: userId,
-      status: { not: 'CANCELLED' },
-      due_date: { gte: start, lte: end }
-    }
-  });
   const plannedMinutes = plannedResult._sum.estimated_minutes || 0;
-
-  // Actual: closed time sessions started in this week + open session elapsed
-  const closedSessions = await prisma.timeSession.aggregate({
-    _sum: { duration_minutes: true },
-    where: {
-      user_id: userId,
-      started_at: { gte: start, lte: end },
-      ended_at: { not: null }
-    }
-  });
   const closedMinutes = closedSessions._sum.duration_minutes || 0;
-
-  // Check for an open (running) session in this week
-  const openSession = await prisma.timeSession.findFirst({
-    where: {
-      user_id: userId,
-      started_at: { gte: start, lte: end },
-      ended_at: null
-    }
-  });
   const openMinutes = openSession
-    ? Math.floor((Date.now() - new Date(openSession.started_at).getTime()) / 60000)
+    ? Math.max(0, Math.floor((Date.now() - new Date(openSession.started_at).getTime()) / 60000))
     : 0;
 
   const actualMinutes = closedMinutes + openMinutes;
@@ -161,24 +197,7 @@ export async function getUserWorkload(userId, weekDate) {
   const remainingCapacityMinutes = capacityMinutes - plannedMinutes;
   const riskLevel = getRiskLevel(plannedUtilizationPct);
 
-  // Active tickets: status in TODO/IN_PROGRESS/IN_REVIEW/STUCK
-  const activeTicketCount = await prisma.ticket.count({
-    where: {
-      assigned_to: userId,
-      status: { in: ['TODO', 'IN_PROGRESS', 'IN_REVIEW', 'STUCK'] }
-    }
-  });
-
-  // Overdue: dueDate < now AND status not DONE/CANCELLED
-  const overdueTicketCount = await prisma.ticket.count({
-    where: {
-      assigned_to: userId,
-      due_date: { lt: new Date() },
-      status: { notIn: ['DONE', 'CANCELLED'] }
-    }
-  });
-
-  return {
+  const result = {
     userId,
     weekStart: start.toISOString(),
     weekEnd: end.toISOString(),
@@ -199,98 +218,198 @@ export async function getUserWorkload(userId, weekDate) {
     activeTicketCount,
     overdueTicketCount
   };
+
+  setToCache(cacheKey, result);
+  return result;
 }
 
 /**
- * Department-level workload rollup for a given week.
- */
-export async function getDepartmentWorkload(deptId, weekDate) {
-  const { start, end } = getWeekBounds(weekDate);
-
-  const dept = await prisma.department.findUnique({
-    where: { id: deptId },
-    select: { id: true, name: true }
-  });
-
-  const members = await prisma.user.findMany({
-    where: { department_id: deptId, is_active: true },
-    select: { id: true, name: true, username: true, role: true, title: true }
-  });
-
-  const memberRows = await Promise.all(
-    members.map(async (m) => {
-      const wl = await getUserWorkload(m.id, weekDate);
-      return { user: m, ...wl };
-    })
-  );
-
-  // Department rollup is sum of members
-  const totalCapacity = memberRows.reduce((s, r) => s + r.capacityMinutes, 0);
-  const totalPlanned = memberRows.reduce((s, r) => s + r.plannedMinutes, 0);
-  const totalActual = memberRows.reduce((s, r) => s + r.actualMinutes, 0);
-  const deptPlannedUtilizationPct = totalCapacity > 0
-    ? Math.round((totalPlanned / totalCapacity) * 100) : 0;
-  const deptActualUtilizationPct = totalCapacity > 0
-    ? Math.round((totalActual / totalCapacity) * 100) : 0;
-  const deptRiskLevel = getRiskLevel(deptPlannedUtilizationPct);
-
-  // Count active and overdue across department
-  const memberIds = members.map(m => m.id);
-  const totalTickets = await prisma.ticket.count({
-    where: { assigned_to: { in: memberIds } }
-  });
-  const activeTickets = await prisma.ticket.count({
-    where: {
-      assigned_to: { in: memberIds },
-      status: { in: ['TODO', 'IN_PROGRESS', 'IN_REVIEW', 'STUCK'] }
-    }
-  });
-  const completedTickets = await prisma.ticket.count({
-    where: { assigned_to: { in: memberIds }, status: 'DONE' }
-  });
-  const overdueTickets = await prisma.ticket.count({
-    where: {
-      assigned_to: { in: memberIds },
-      due_date: { lt: new Date() },
-      status: { notIn: ['DONE', 'CANCELLED'] }
-    }
-  });
-
-  return {
-    department: dept,
-    weekStart: start.toISOString(),
-    weekEnd: end.toISOString(),
-    totalCapacityMinutes: totalCapacity,
-    totalCapacityHours: Number((totalCapacity / 60).toFixed(1)),
-    totalPlannedMinutes: totalPlanned,
-    totalPlannedHours: Number((totalPlanned / 60).toFixed(1)),
-    totalActualMinutes: totalActual,
-    totalActualHours: Number((totalActual / 60).toFixed(1)),
-    plannedUtilizationPct: deptPlannedUtilizationPct,
-    actualUtilizationPct: deptActualUtilizationPct,
-    riskLevel: deptRiskLevel,
-    riskLabel: getRiskLabel(deptPlannedUtilizationPct),
-    totalTickets,
-    activeTickets,
-    completedTickets,
-    overdueTickets,
-    members: memberRows
-  };
-}
-
-/**
- * Group-wide workload — all 4 departments.
+ * High-performance Group-wide workload rollup.
+ * Replaces ~90 queries with 5 concurrent bulk queries and in-memory rollup.
  */
 export async function getGroupWorkload(weekDate) {
-  const { start, end } = getWeekBounds(weekDate);
-  const departments = await prisma.department.findMany({
-    orderBy: { name: 'asc' },
-    select: { id: true, name: true }
-  });
+  const cacheKey = `group_${weekStartDate(weekDate)}`;
+  const cached = getFromCache(cacheKey);
+  if (cached) return cached;
 
-  const deptRows = await Promise.all(
-    departments.map((d) => getDepartmentWorkload(d.id, weekDate))
-  );
+  const { start, end } = getWeekBounds(weekDate);
+  const dateObj = weekStartDateObject(weekDate);
+
+  // 5 bulk queries executed concurrently
+  const [departments, allUsers, overrides, tickets, sessions] = await Promise.all([
+    prisma.department.findMany({
+      orderBy: { name: 'asc' },
+      select: { id: true, name: true }
+    }),
+    prisma.user.findMany({
+      where: { is_active: true },
+      select: {
+        id: true,
+        name: true,
+        username: true,
+        role: true,
+        title: true,
+        department_id: true,
+        department: { select: { id: true, name: true } }
+      }
+    }),
+    prisma.userCapacityOverride.findMany({
+      where: { week_start_date: dateObj }
+    }),
+    prisma.ticket.findMany({
+      select: {
+        id: true,
+        assigned_to: true,
+        estimated_minutes: true,
+        status: true,
+        due_date: true
+      }
+    }),
+    prisma.timeSession.findMany({
+      where: { started_at: { gte: start, lte: end } },
+      select: {
+        id: true,
+        user_id: true,
+        duration_minutes: true,
+        started_at: true,
+        ended_at: true
+      }
+    })
+  ]);
+
+  const overrideMap = new Map(overrides.map(o => [o.user_id, o]));
+
+  // Index tickets by user
+  const ticketsByUser = new Map();
+  for (const t of tickets) {
+    if (!ticketsByUser.has(t.assigned_to)) {
+      ticketsByUser.set(t.assigned_to, []);
+    }
+    ticketsByUser.get(t.assigned_to).push(t);
+  }
+
+  // Index sessions by user
+  const sessionsByUser = new Map();
+  for (const s of sessions) {
+    if (!sessionsByUser.has(s.user_id)) {
+      sessionsByUser.set(s.user_id, []);
+    }
+    sessionsByUser.get(s.user_id).push(s);
+  }
+
+  const now = new Date();
+
+  function computeMemberRow(u) {
+    const override = overrideMap.get(u.id);
+    const capacityMinutes = override ? override.minutes : DEFAULT_CAPACITY_MINUTES;
+    const capacityRawText = override ? override.raw_text : '40';
+    const isCapacityOverridden = !!override;
+
+    const uTickets = ticketsByUser.get(u.id) || [];
+    let plannedMinutes = 0;
+    let activeTicketCount = 0;
+    let overdueTicketCount = 0;
+
+    for (const t of uTickets) {
+      const tDue = new Date(t.due_date);
+      if (t.status !== 'CANCELLED' && tDue >= start && tDue <= end) {
+        plannedMinutes += t.estimated_minutes || 0;
+      }
+      if (['TODO', 'IN_PROGRESS', 'IN_REVIEW', 'STUCK'].includes(t.status)) {
+        activeTicketCount++;
+      }
+      if (tDue < now && !['DONE', 'CANCELLED'].includes(t.status)) {
+        overdueTicketCount++;
+      }
+    }
+
+    const uSessions = sessionsByUser.get(u.id) || [];
+    let actualMinutes = 0;
+    for (const s of uSessions) {
+      if (s.ended_at) {
+        actualMinutes += s.duration_minutes || 0;
+      } else {
+        actualMinutes += Math.max(0, Math.floor((Date.now() - new Date(s.started_at).getTime()) / 60000));
+      }
+    }
+
+    const plannedUtilizationPct = capacityMinutes > 0
+      ? Math.round((plannedMinutes / capacityMinutes) * 100) : 0;
+    const actualUtilizationPct = capacityMinutes > 0
+      ? Math.round((actualMinutes / capacityMinutes) * 100) : 0;
+    const remainingCapacityMinutes = capacityMinutes - plannedMinutes;
+
+    return {
+      userId: u.id,
+      user: u,
+      name: u.name,
+      username: u.username,
+      role: u.role,
+      title: u.title,
+      departmentId: u.department_id,
+      departmentName: u.department?.name,
+      weekStart: start.toISOString(),
+      weekEnd: end.toISOString(),
+      capacityMinutes,
+      capacityHours: capacityMinutes / 60,
+      capacityRawText,
+      isCapacityOverridden,
+      plannedMinutes,
+      plannedHours: Number((plannedMinutes / 60).toFixed(1)),
+      actualMinutes,
+      actualHours: Number((actualMinutes / 60).toFixed(1)),
+      plannedUtilizationPct,
+      actualUtilizationPct,
+      remainingCapacityMinutes,
+      remainingCapacityHours: Number((remainingCapacityMinutes / 60).toFixed(1)),
+      riskLevel: getRiskLevel(plannedUtilizationPct),
+      riskLabel: getRiskLabel(plannedUtilizationPct),
+      activeTicketCount,
+      overdueTicketCount
+    };
+  }
+
+  const allMemberRows = allUsers.map(u => computeMemberRow(u));
+
+  // Department rollups
+  const deptRows = departments.map(d => {
+    const dMembers = allMemberRows.filter(m => m.departmentId === d.id);
+    const totalCapacity = dMembers.reduce((s, r) => s + r.capacityMinutes, 0);
+    const totalPlanned = dMembers.reduce((s, r) => s + r.plannedMinutes, 0);
+    const totalActual = dMembers.reduce((s, r) => s + r.actualMinutes, 0);
+
+    const dPlannedPct = totalCapacity > 0 ? Math.round((totalPlanned / totalCapacity) * 100) : 0;
+    const dActualPct = totalCapacity > 0 ? Math.round((totalActual / totalCapacity) * 100) : 0;
+
+    const dMemberIds = new Set(dMembers.map(m => m.userId));
+    const dTickets = tickets.filter(t => dMemberIds.has(t.assigned_to));
+
+    const totalTicketsCount = dTickets.length;
+    const activeTicketsCount = dTickets.filter(t => ['TODO', 'IN_PROGRESS', 'IN_REVIEW', 'STUCK'].includes(t.status)).length;
+    const completedTicketsCount = dTickets.filter(t => t.status === 'DONE').length;
+    const overdueTicketsCount = dTickets.filter(t => new Date(t.due_date) < now && !['DONE', 'CANCELLED'].includes(t.status)).length;
+
+    return {
+      department: d,
+      weekStart: start.toISOString(),
+      weekEnd: end.toISOString(),
+      totalCapacityMinutes: totalCapacity,
+      totalCapacityHours: Number((totalCapacity / 60).toFixed(1)),
+      totalPlannedMinutes: totalPlanned,
+      totalPlannedHours: Number((totalPlanned / 60).toFixed(1)),
+      totalActualMinutes: totalActual,
+      totalActualHours: Number((totalActual / 60).toFixed(1)),
+      plannedUtilizationPct: dPlannedPct,
+      actualUtilizationPct: dActualPct,
+      riskLevel: getRiskLevel(dPlannedPct),
+      riskLabel: getRiskLabel(dPlannedPct),
+      totalTickets: totalTicketsCount,
+      activeTickets: activeTicketsCount,
+      completedTickets: completedTicketsCount,
+      overdueTickets: overdueTicketsCount,
+      members: dMembers
+    };
+  });
 
   const totalCapacity = deptRows.reduce((s, d) => s + d.totalCapacityMinutes, 0);
   const totalPlanned = deptRows.reduce((s, d) => s + d.totalPlannedMinutes, 0);
@@ -305,10 +424,7 @@ export async function getGroupWorkload(weekDate) {
   const groupActualUtilizationPct = totalCapacity > 0
     ? Math.round((totalActual / totalCapacity) * 100) : 0;
 
-  // Flatten all members for group-wide overview
-  const allMembers = deptRows.flatMap(d => d.members);
-
-  return {
+  const result = {
     weekStart: start.toISOString(),
     weekEnd: end.toISOString(),
     totalCapacityMinutes: totalCapacity,
@@ -326,104 +442,216 @@ export async function getGroupWorkload(weekDate) {
     completedTickets,
     overdueTickets,
     departments: deptRows,
-    members: allMembers
+    members: allMemberRows.filter(m => m.role !== 'HEAD_GROUP')
+  };
+
+  setToCache(cacheKey, result);
+  return result;
+}
+
+/**
+ * Department-level workload rollup. Reuses bulk group workload for instant response.
+ */
+export async function getDepartmentWorkload(deptId, weekDate) {
+  const group = await getGroupWorkload(weekDate);
+  const dept = group.departments.find(d => d.department.id === deptId);
+  if (dept) return dept;
+
+  const d = await prisma.department.findUnique({
+    where: { id: deptId },
+    select: { id: true, name: true }
+  });
+
+  return {
+    department: d || { id: deptId, name: 'Unknown' },
+    weekStart: group.weekStart,
+    weekEnd: group.weekEnd,
+    totalCapacityMinutes: 0,
+    totalCapacityHours: 0,
+    totalPlannedMinutes: 0,
+    totalPlannedHours: 0,
+    totalActualMinutes: 0,
+    totalActualHours: 0,
+    plannedUtilizationPct: 0,
+    actualUtilizationPct: 0,
+    riskLevel: 'NORMAL',
+    riskLabel: 'Normal',
+    totalTickets: 0,
+    activeTickets: 0,
+    completedTickets: 0,
+    overdueTickets: 0,
+    members: []
   };
 }
 
 /**
  * Sustained high workload: planned_utilization > 100% for 2+ consecutive weeks.
+ * Replaces 300+ queries with 3 bulk queries and in-memory 4-week window calculation.
  */
 export async function getSustainedHighWorkload(weekDate) {
+  const cacheKey = `sustained_${weekStartDate(weekDate)}`;
+  const cached = getFromCache(cacheKey);
+  if (cached) return cached;
+
   const { start } = getWeekBounds(weekDate);
-  const users = await prisma.user.findMany({
-    where: { is_active: true, role: { not: 'HEAD_GROUP' } },
-    select: {
-      id: true,
-      name: true,
-      username: true,
-      department_id: true,
-      department: { select: { id: true, name: true } }
-    }
-  });
+
+  // 4-week window start (start - 21 days)
+  const fourWeeksStart = new Date(start);
+  fourWeeksStart.setUTCDate(start.getUTCDate() - 21);
+  const fourWeeksEnd = new Date(start);
+  fourWeeksEnd.setUTCDate(start.getUTCDate() + 6);
+  fourWeeksEnd.setUTCHours(23, 59, 59, 999);
+
+  const [users, overrides, tickets] = await Promise.all([
+    prisma.user.findMany({
+      where: { is_active: true, role: { not: 'HEAD_GROUP' } },
+      select: {
+        id: true,
+        name: true,
+        username: true,
+        department_id: true,
+        department: { select: { id: true, name: true } }
+      }
+    }),
+    prisma.userCapacityOverride.findMany({
+      where: {
+        week_start_date: {
+          gte: new Date(fourWeeksStart.toISOString().slice(0, 10)),
+          lte: new Date(start.toISOString().slice(0, 10))
+        }
+      }
+    }),
+    prisma.ticket.findMany({
+      where: {
+        status: { not: 'CANCELLED' },
+        due_date: { gte: fourWeeksStart, lte: fourWeeksEnd }
+      },
+      select: {
+        assigned_to: true,
+        estimated_minutes: true,
+        due_date: true
+      }
+    })
+  ]);
 
   const sustained = [];
   for (const u of users) {
     let highCount = 0;
     for (let w = 0; w < 4; w++) {
-      const wDate = new Date(start);
-      wDate.setUTCDate(start.getUTCDate() - w * 7);
-      const wl = await getUserWorkload(u.id, wDate);
-      if (wl.plannedUtilizationPct > 100) {
+      const wStart = new Date(start);
+      wStart.setUTCDate(start.getUTCDate() - w * 7);
+      const wEnd = new Date(wStart);
+      wEnd.setUTCDate(wStart.getUTCDate() + 6);
+      wEnd.setUTCHours(23, 59, 59, 999);
+
+      const wDateIso = wStart.toISOString().slice(0, 10);
+      const ov = overrides.find(o => o.user_id === u.id && o.week_start_date.toISOString().slice(0, 10) === wDateIso);
+      const cap = ov ? ov.minutes : DEFAULT_CAPACITY_MINUTES;
+
+      let planned = 0;
+      for (const t of tickets) {
+        if (t.assigned_to === u.id) {
+          const td = new Date(t.due_date);
+          if (td >= wStart && td <= wEnd) {
+            planned += t.estimated_minutes || 0;
+          }
+        }
+      }
+
+      const util = cap > 0 ? (planned / cap) * 100 : 0;
+      if (util > 100) {
         highCount++;
       } else {
-        break; // not consecutive
+        break; // consecutive broken
       }
     }
+
     if (highCount >= 2) {
-      const wl = await getUserWorkload(u.id, weekDate);
+      const currentWorkload = await getUserWorkload(u.id, weekDate);
       sustained.push({
         user: u,
         consecutiveWeeks: highCount,
-        ...wl
+        ...currentWorkload
       });
     }
   }
+
+  setToCache(cacheKey, sustained);
   return sustained;
 }
 
 /**
- * Multi-week trend for a user (default 4 weeks ending at weekDate).
+ * Multi-week trend for a user (concurrent resolution).
  */
 export async function getUserWeeklyTrend(userId, weekDate, numWeeks = 4) {
-  const { start } = getWeekBounds(weekDate);
-  const weeks = [];
+  const cacheKey = `trend_${userId}_${weekStartDate(weekDate)}_${numWeeks}`;
+  const cached = getFromCache(cacheKey);
+  if (cached) return cached;
 
+  const { start } = getWeekBounds(weekDate);
+  const weekDates = [];
   for (let i = numWeeks - 1; i >= 0; i--) {
     const w = new Date(start);
     w.setUTCDate(start.getUTCDate() - i * 7);
-    const wl = await getUserWorkload(userId, w);
-    const weekLabel = `W ${w.toISOString().slice(5, 10)}`;
-    weeks.push({
-      weekLabel,
-      weekStart: wl.weekStart,
-      capacityHours: wl.capacityHours,
-      plannedHours: wl.plannedHours,
-      actualHours: wl.actualHours,
-      plannedUtilizationPct: wl.plannedUtilizationPct,
-      actualUtilizationPct: wl.actualUtilizationPct,
-      riskLevel: wl.riskLevel
-    });
+    weekDates.push(w);
   }
 
+  const weeks = await Promise.all(
+    weekDates.map(async (w) => {
+      const wl = await getUserWorkload(userId, w);
+      return {
+        weekLabel: `W ${w.toISOString().slice(5, 10)}`,
+        weekStart: wl.weekStart,
+        capacityHours: wl.capacityHours,
+        plannedHours: wl.plannedHours,
+        actualHours: wl.actualHours,
+        plannedUtilizationPct: wl.plannedUtilizationPct,
+        actualUtilizationPct: wl.actualUtilizationPct,
+        riskLevel: wl.riskLevel
+      };
+    })
+  );
+
+  setToCache(cacheKey, weeks);
   return weeks;
 }
 
 /**
- * Daily workload breakdown for Monday-Sunday of a given week.
+ * Daily workload breakdown for Monday-Sunday.
+ * Replaces 7 sequential queries with 1 single query for the entire week.
  */
 export async function getUserDailyWorkload(userId, weekDate) {
-  const { start } = getWeekBounds(weekDate);
-  const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-  const daily = [];
+  const cacheKey = `daily_${userId}_${weekStartDate(weekDate)}`;
+  const cached = getFromCache(cacheKey);
+  if (cached) return cached;
 
+  const { start, end } = getWeekBounds(weekDate);
+  const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+  const sessions = await prisma.timeSession.findMany({
+    where: {
+      user_id: userId,
+      started_at: { gte: start, lte: end },
+      ended_at: { not: null }
+    },
+    select: {
+      duration_minutes: true,
+      started_at: true
+    }
+  });
+
+  const dailyMinutes = [0, 0, 0, 0, 0, 0, 0];
+  for (const s of sessions) {
+    const sDate = new Date(s.started_at);
+    const dayIdx = (sDate.getUTCDay() + 6) % 7;
+    dailyMinutes[dayIdx] += s.duration_minutes || 0;
+  }
+
+  const daily = [];
   for (let i = 0; i < 7; i++) {
     const dayStart = new Date(start);
     dayStart.setUTCDate(start.getUTCDate() + i);
-    dayStart.setUTCHours(0, 0, 0, 0);
-
-    const dayEnd = new Date(dayStart);
-    dayEnd.setUTCHours(23, 59, 59, 999);
-
-    const agg = await prisma.timeSession.aggregate({
-      _sum: { duration_minutes: true },
-      where: {
-        user_id: userId,
-        started_at: { gte: dayStart, lte: dayEnd },
-        ended_at: { not: null }
-      }
-    });
-
-    const mins = agg._sum.duration_minutes || 0;
+    const mins = dailyMinutes[i];
     daily.push({
       day: days[i],
       date: dayStart.toISOString().slice(0, 10),
@@ -432,6 +660,7 @@ export async function getUserDailyWorkload(userId, weekDate) {
     });
   }
 
+  setToCache(cacheKey, daily);
   return daily;
 }
 
@@ -498,5 +727,6 @@ export async function setCapacityOverride(requesterId, targetUserId, weekDate, r
     }
   });
 
+  clearWorkloadCache();
   return override;
 }
