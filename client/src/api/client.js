@@ -1,6 +1,7 @@
 import { useAuthStore } from '@/stores/auth';
 
-const BASE_URL = '/api/v1';
+const RAW_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/v1';
+const BASE_URL = RAW_BASE_URL.replace(/\/+$/, '');
 
 let isRefreshing = false;
 let refreshSubscribers = [];

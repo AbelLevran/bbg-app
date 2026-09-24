@@ -3,7 +3,7 @@ import * as authService from '../services/auth.service.js';
 const COOKIE_OPTIONS = {
   httpOnly: true,
   secure: process.env.NODE_ENV === 'production',
-  sameSite: 'lax',
+  sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
   maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
 };
 
@@ -17,6 +17,7 @@ export async function login(req, res, next) {
     res.json({
       success: true,
       accessToken: result.accessToken,
+      refreshToken: result.refreshToken,
       user: result.user
     });
   } catch (error) {
@@ -34,6 +35,7 @@ export async function refresh(req, res, next) {
     res.json({
       success: true,
       accessToken: result.accessToken,
+      refreshToken: result.refreshToken,
       user: result.user
     });
   } catch (error) {
@@ -46,11 +48,7 @@ export async function logout(req, res, next) {
     const refreshToken = req.cookies?.refreshToken || req.body?.refreshToken;
     await authService.logout(refreshToken);
 
-    res.clearCookie('refreshToken', {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax'
-    });
+    res.clearCookie('refreshToken', COOKIE_OPTIONS);
 
     res.json({
       success: true,
