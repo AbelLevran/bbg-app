@@ -91,11 +91,11 @@ function isActive(itemPath) {
     <!-- Brand Header -->
     <div class="sidebar-brand">
       <div class="brand-left">
-        <div class="brand-logo">
-          <Layers :size="22" class="brand-icon" />
-        </div>
+        <!-- <div class="brand-logo">
+          <Layers :size="20" class="brand-icon" />
+        </div> -->
         <div class="brand-text">
-          <span class="brand-name">BBG SYSTEM</span>
+          <span class="brand-name">BBG GROUP</span>
           <span class="brand-subtitle">Work & Burnout Tracker</span>
         </div>
       </div>
@@ -179,10 +179,10 @@ function isActive(itemPath) {
 }
 
 .brand-name {
-  font-size: 0.95rem;
-  font-weight: 800;
+  font-size: 1.8rem;
+  font-weight: 1000;
   letter-spacing: 0.04em;
-  color: var(--text-primary);
+  color: var(--bsi-gold-hover);
 }
 
 .brand-subtitle {

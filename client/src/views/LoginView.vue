@@ -60,7 +60,7 @@ async function handleLogin() {
         <div class="brand-badge">
           <Layers :size="28" class="brand-icon" />
         </div>
-        <h1 class="system-title">BBG System</h1>
+        <h1 class="system-title">BBG GROUP</h1>
         <p class="system-desc">Group Work Management & Burnout Tracker</p>
       </div>
 
