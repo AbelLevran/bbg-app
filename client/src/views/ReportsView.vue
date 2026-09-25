@@ -27,12 +27,13 @@ const preloadStore = usePreloadStore();
 const activeTab = ref('weekly'); // 'weekly' | 'department'
 const selectedWeek = ref(workloadStore.selectedWeek);
 const searchQuery = ref('');
-const loading = ref(true);
 const isExporting = ref(false);
 const errorMsg = ref('');
 
-const weeklyData = ref([]);
-const departmentData = ref([]);
+const initialCached = preloadStore.getCachedReports(workloadStore.selectedWeek);
+const weeklyData = ref(initialCached.weekly || []);
+const departmentData = ref(initialCached.department || []);
+const loading = ref(!(initialCached.weekly && initialCached.department));
 
 onMounted(async () => {
   await loadReports();
@@ -43,13 +44,14 @@ watch(selectedWeek, async (newWeek) => {
   await loadReports();
 });
 
-async function loadReports() {
+async function loadReports(force = false) {
   // Optimistic Cache Hit: render preloaded data instantly (0ms latency!)
   const cached = preloadStore.getCachedReports(selectedWeek.value);
   if (cached.weekly && cached.department) {
     weeklyData.value = cached.weekly;
     departmentData.value = cached.department;
     loading.value = false;
+    if (!force) return;
   } else {
     loading.value = true;
   }

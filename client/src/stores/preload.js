@@ -12,6 +12,7 @@ export const usePreloadStore = defineStore('preload', () => {
   const isPreloading = ref(false);
   const progress = ref(0);
   const statusMessage = ref('');
+  const eventsCache = ref([]);
   const reportsCache = ref({
     weekly: {},
     department: {}
@@ -42,7 +43,7 @@ export const usePreloadStore = defineStore('preload', () => {
     const week = workloadStore.selectedWeek || new Date().toISOString().slice(0, 10);
 
     try {
-      // ─── Phase 1: Core Navigation Data (Tickets, Active Timer, Departments) ───
+      // ─── Phase 1: Core Navigation Data (Tickets, Active Timer, Departments, Users, Events) ───
       progress.value = 25;
       statusMessage.value = 'Syncing tickets, active timer & departments...';
 
@@ -50,7 +51,10 @@ export const usePreloadStore = defineStore('preload', () => {
         timerStore.fetchActive().catch(() => {}),
         ticketsStore.fetchTickets().catch(() => {}),
         orgStore.fetchDepartments().catch(() => {}),
-        eventsApi.getEvents().catch(() => [])
+        orgStore.fetchUsers().catch(() => {}),
+        eventsApi.getEvents().then(res => {
+          eventsCache.value = res || [];
+        }).catch(() => [])
       ];
 
       await Promise.all(phase1Promises);
@@ -128,6 +132,7 @@ export const usePreloadStore = defineStore('preload', () => {
     isPreloading,
     progress,
     statusMessage,
+    eventsCache,
     reportsCache,
     getCachedReports,
     setCachedReports,

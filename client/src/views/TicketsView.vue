@@ -3,7 +3,8 @@ import { ref, computed, onMounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
 import { useTicketsStore } from '@/stores/tickets';
-import { orgApi } from '@/api/org';
+import { useOrgStore } from '@/stores/org';
+import { usePreloadStore } from '@/stores/preload';
 import { eventsApi } from '@/api/events';
 import TicketTable from '@/components/tickets/TicketTable.vue';
 import TicketFiltersBar from '@/components/tickets/TicketFiltersBar.vue';
@@ -14,15 +15,17 @@ import { CheckSquare, Calendar, Plus, AlertTriangle, Trash2, X, RefreshCw } from
 const router = useRouter();
 const authStore = useAuthStore();
 const ticketsStore = useTicketsStore();
+const orgStore = useOrgStore();
+const preloadStore = usePreloadStore();
 
-const departments = ref([]);
+const departments = ref(orgStore.departments || []);
 const activeTab = ref('DAILY');
 const ticketToDelete = ref(null);
 const deleteConfirmText = ref('');
 const deleting = ref(false);
 
 // Events state
-const eventsList = ref([]);
+const eventsList = ref(preloadStore.eventsCache || []);
 const loadingEvents = ref(false);
 const selectedEventName = ref(null);
 
@@ -34,12 +37,18 @@ const ticketsTitle = computed(() => {
 
 onMounted(() => {
   if (authStore.isHeadGroup) {
-    orgApi.getDepartments().then(res => {
-      departments.value = res.departments || [];
-    }).catch(() => {});
+    if (orgStore.departments.length === 0) {
+      orgStore.fetchDepartments().then(deps => {
+        departments.value = deps;
+      });
+    } else {
+      departments.value = orgStore.departments;
+    }
   }
   loadTickets();
-  loadEvents();
+  if (eventsList.value.length === 0) {
+    loadEvents();
+  }
 });
 
 watch(activeTab, (val) => {
@@ -57,11 +66,13 @@ function loadTickets() {
   ticketsStore.fetchTickets();
 }
 
-async function loadEvents() {
+async function loadEvents(force = false) {
+  if (!force && eventsList.value.length > 0) return;
   loadingEvents.value = true;
   try {
     const res = await eventsApi.getEvents();
     eventsList.value = res || [];
+    preloadStore.eventsCache = eventsList.value;
   } catch (err) {
     console.error('Failed to load events:', err);
   } finally {

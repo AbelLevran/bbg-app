@@ -38,9 +38,11 @@ watch(() => route.path, () => {
       <Topbar @toggle-menu="toggleMobileNav" />
       <main class="page-content">
         <div class="page-content-inner">
-          <router-view v-slot="{ Component }">
+          <router-view v-slot="{ Component, route }">
             <transition name="fade" mode="out-in">
-              <component :is="Component" />
+              <keep-alive :max="15">
+                <component :is="Component" :key="route.path" />
+              </keep-alive>
             </transition>
           </router-view>
         </div>

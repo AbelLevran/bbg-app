@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
 import { useWorkloadStore } from '@/stores/workload';
 import { useTicketsStore } from '@/stores/tickets';
-import { orgApi } from '@/api/org';
+import { useOrgStore } from '@/stores/org';
 import RoleBadge from '@/components/common/RoleBadge.vue';
 import WeekSelector from '@/components/common/WeekSelector.vue';
 import KpiCard from '@/components/common/KpiCard.vue';
@@ -24,28 +24,36 @@ const router = useRouter();
 const authStore = useAuthStore();
 const workloadStore = useWorkloadStore();
 const ticketsStore = useTicketsStore();
+const orgStore = useOrgStore();
 
 const user = computed(() => authStore.user);
 const selectedWeek = ref(workloadStore.selectedWeek);
 
 // Reference data
-const departments = ref([]);
-const usersList = ref([]);
+const departments = ref(orgStore.departments || []);
+const usersList = ref(orgStore.users || []);
 
 // Filter states for Head Group
 const selectedDeptId = ref('');
 const selectedEmpId = ref('');
 const selectedRiskFilter = ref('ALL'); // ALL, NORMAL, HIGH, OVER, EXTREME
 
+// Optimistic Cache Hit from preloaded Pinia store (0ms initial render)
+const hasInitialCache = (authStore.isHeadGroup && !!workloadStore.groupWorkload) ||
+                        (authStore.isDepartmentHead && !!workloadStore.deptWorkload) ||
+                        (authStore.isMember && !!workloadStore.userWorkload);
+
 // Dashboard states
-const groupData = ref(null);
-const deptData = ref(null);
-const memberData = ref(null);
-const sustainedAlerts = ref([]);
-const memberActiveTickets = ref([]);
-const trendData = ref([]);
-const dailyData = ref([]);
-const loading = ref(true);
+const groupData = ref(workloadStore.groupWorkload || null);
+const deptData = ref(workloadStore.deptWorkload || null);
+const memberData = ref(workloadStore.userWorkload || null);
+const sustainedAlerts = ref(workloadStore.alerts || []);
+const memberActiveTickets = ref((ticketsStore.list || []).filter(t =>
+  ['TODO', 'IN_PROGRESS', 'IN_REVIEW', 'STUCK'].includes(t.status)
+));
+const trendData = ref(workloadStore.userTrend || []);
+const dailyData = ref(workloadStore.userDaily || []);
+const loading = ref(!hasInitialCache);
 
 const dashboardTitle = computed(() => {
   if (authStore.isHeadGroup) return 'Head Group Executive Dashboard';
@@ -61,13 +69,15 @@ const dashboardSubtitle = computed(() => {
 
 onMounted(async () => {
   if (authStore.isHeadGroup) {
-    try {
-      const dRes = await orgApi.getDepartments();
-      departments.value = dRes.departments || [];
-      const uRes = await orgApi.getUsers();
-      usersList.value = uRes.users || [];
-    } catch {
-      // ignore
+    if (orgStore.departments.length === 0) {
+      orgStore.fetchDepartments().then(deps => { departments.value = deps; });
+    } else {
+      departments.value = orgStore.departments;
+    }
+    if (orgStore.users.length === 0) {
+      orgStore.fetchUsers().then(users => { usersList.value = users; });
+    } else {
+      usersList.value = orgStore.users;
     }
   }
   await loadDashboardData();
@@ -78,7 +88,7 @@ watch(selectedWeek, async (newWeek) => {
   await loadDashboardData();
 });
 
-async function loadDashboardData() {
+async function loadDashboardData(force = false) {
   const week = selectedWeek.value;
 
   // Optimistic Cache Hit: render preloaded data instantly (0ms latency!)
@@ -106,6 +116,8 @@ async function loadDashboardData() {
       );
     }
     loading.value = false;
+    // Cache hit: do not make remote network call on normal page transitions
+    if (!force) return;
   } else {
     loading.value = true;
   }

@@ -22,11 +22,11 @@ const workloadStore = useWorkloadStore();
 const ticketsStore = useTicketsStore();
 
 const selectedWeek = ref(workloadStore.selectedWeek);
-const loading = ref(true);
-const workload = ref(null);
-const trendData = ref([]);
-const dailyData = ref([]);
-const myTickets = ref([]);
+const workload = ref(workloadStore.userWorkload || null);
+const trendData = ref(workloadStore.userTrend || []);
+const dailyData = ref(workloadStore.userDaily || []);
+const myTickets = ref((ticketsStore.list || []).filter(t => t.assignedTo?.id === authStore.user?.id));
+const loading = ref(!workloadStore.userWorkload);
 
 const activeTickets = computed(() =>
   myTickets.value.filter(t => ['TODO', 'IN_PROGRESS', 'IN_REVIEW', 'STUCK'].includes(t.status))
@@ -65,7 +65,7 @@ watch(selectedWeek, async (newWeek) => {
   await loadMyWork();
 });
 
-async function loadMyWork() {
+async function loadMyWork(force = false) {
   if (!authStore.user) return;
   const week = selectedWeek.value;
   const userId = authStore.user.id;
@@ -77,6 +77,7 @@ async function loadMyWork() {
     dailyData.value = workloadStore.userDaily || [];
     myTickets.value = (ticketsStore.list || []).filter(t => t.assignedTo?.id === userId);
     loading.value = false;
+    if (!force) return;
   } else {
     loading.value = true;
   }

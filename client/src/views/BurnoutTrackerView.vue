@@ -14,8 +14,8 @@ const workloadStore = useWorkloadStore();
 
 const selectedWeek = ref(workloadStore.selectedWeek);
 const selectedDeptFilter = ref(''); // Head Group only filter
-const groupData = ref(null);
-const loading = ref(true);
+const groupData = ref(workloadStore.groupWorkload || null);
+const loading = ref(!workloadStore.groupWorkload);
 
 onMounted(async () => {
   await loadTrackerData();
@@ -26,17 +26,18 @@ watch(selectedWeek, async (newWeek) => {
   await loadTrackerData();
 });
 
-async function loadTrackerData() {
+async function loadTrackerData(force = false) {
   // Optimistic Cache Hit: render preloaded data instantly (0ms latency!)
   if (workloadStore.groupWorkload) {
     groupData.value = workloadStore.groupWorkload;
     loading.value = false;
+    if (!force) return;
   } else {
     loading.value = true;
   }
 
   try {
-    const data = await workloadStore.fetchGroupWorkload(selectedWeek.value);
+    const data = await workloadStore.fetchGroupWorkload(selectedWeek.value, force);
     groupData.value = data;
   } catch (err) {
     console.error('Failed to load burnout tracker data:', err);
