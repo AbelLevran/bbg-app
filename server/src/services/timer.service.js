@@ -38,19 +38,23 @@ export async function getActiveTimer(userId) {
 // ─── START ────────────────────────────────────────────────────────────────
 
 export async function startTimer({ ticketId, user }) {
-  // Only assignee may operate timer (design.md §3.4)
-  const ticket = await prisma.ticket.findUnique({ where: { id: ticketId } });
+  // Parallel fetch: check ticket and user's current timer simultaneously
+  const [ticket, existing] = await Promise.all([
+    prisma.ticket.findUnique({
+      where: { id: ticketId },
+      select: { id: true, assigned_to: true, status: true }
+    }),
+    prisma.activeTimer.findUnique({
+      where: { user_id: user.id },
+      include: TIMER_INCLUDE
+    })
+  ]);
+
   if (!ticket) { const err = new Error('Ticket not found'); err.statusCode = 404; throw err; }
   if (ticket.assigned_to !== user.id) {
     const err = new Error('Only the assigned user can operate this ticket\'s timer');
     err.statusCode = 403; throw err;
   }
-
-  // Check for existing active timer on a DIFFERENT ticket (one-active-timer rule)
-  const existing = await prisma.activeTimer.findUnique({
-    where: { user_id: user.id },
-    include: TIMER_INCLUDE
-  });
 
   if (existing && existing.ticket_id !== ticketId) {
     const err = new Error('You already have an active timer on another ticket');
@@ -60,50 +64,49 @@ export async function startTimer({ ticketId, user }) {
   }
 
   if (existing && existing.ticket_id === ticketId) {
-    // Already running/paused on this ticket — treat as no-op or re-start from paused
-    // If PAUSED, treat as resume
     if (existing.status === 'PAUSED') {
       return resumeTimer({ ticketId, user });
     }
-    // Already RUNNING — return current state
     return formatActiveTimer(existing);
   }
 
-  // Create a new time session row
-  const session = await prisma.timeSession.create({
-    data: {
-      ticket_id: ticketId,
-      user_id: user.id,
-      started_at: new Date(),
-      source: 'TIMER'
-    }
+  // Atomically create session and upsert active timer
+  const timer = await prisma.$transaction(async (tx) => {
+    const session = await tx.timeSession.create({
+      data: {
+        ticket_id: ticketId,
+        user_id: user.id,
+        started_at: new Date(),
+        source: 'TIMER'
+      }
+    });
+
+    return tx.activeTimer.upsert({
+      where: { user_id: user.id },
+      create: {
+        user_id: user.id,
+        ticket_id: ticketId,
+        status: 'RUNNING',
+        active_session_id: session.id
+      },
+      update: {
+        ticket_id: ticketId,
+        status: 'RUNNING',
+        active_session_id: session.id
+      },
+      include: TIMER_INCLUDE
+    });
   });
 
-  // Upsert active_timers row
-  const timer = await prisma.activeTimer.upsert({
-    where: { user_id: user.id },
-    create: {
-      user_id: user.id,
-      ticket_id: ticketId,
-      status: 'RUNNING',
-      active_session_id: session.id
-    },
-    update: {
-      ticket_id: ticketId,
-      status: 'RUNNING',
-      active_session_id: session.id
-    },
-    include: TIMER_INCLUDE
-  });
-
-  await prisma.activityLog.create({
+  // Non-blocking activity log (fire-and-forget to avoid round-trip latency)
+  void prisma.activityLog.create({
     data: {
       ticket_id: ticketId,
       user_id: user.id,
       type: 'TIMER_STARTED',
       description: `Timer started by ${user.name}`
     }
-  });
+  }).catch(err => console.error('[ActivityLog] failed to log timer start:', err.message));
 
   return formatActiveTimer(timer);
 }
@@ -111,16 +114,26 @@ export async function startTimer({ ticketId, user }) {
 // ─── PAUSE ────────────────────────────────────────────────────────────────
 
 export async function pauseTimer({ ticketId, user }) {
-  const ticket = await prisma.ticket.findUnique({ where: { id: ticketId } });
+  // Parallel fetch: check ticket and active timer with active_session in one go
+  const [ticket, existing] = await Promise.all([
+    prisma.ticket.findUnique({
+      where: { id: ticketId },
+      select: { id: true, assigned_to: true }
+    }),
+    prisma.activeTimer.findUnique({
+      where: { user_id: user.id },
+      include: {
+        ...TIMER_INCLUDE,
+        active_session: { select: { id: true, started_at: true } }
+      }
+    })
+  ]);
+
   if (!ticket) { const err = new Error('Ticket not found'); err.statusCode = 404; throw err; }
   if (ticket.assigned_to !== user.id) {
     const err = new Error('Only the assigned user can operate this ticket\'s timer');
     err.statusCode = 403; throw err;
   }
-
-  const existing = await prisma.activeTimer.findUnique({
-    where: { user_id: user.id }
-  });
 
   if (!existing || existing.ticket_id !== ticketId) {
     const err = new Error('No active timer for this ticket'); err.statusCode = 400; throw err;
@@ -129,31 +142,40 @@ export async function pauseTimer({ ticketId, user }) {
     const err = new Error('Timer is already paused'); err.statusCode = 400; throw err;
   }
 
-  // Close the active session
   const endedAt = new Date();
-  const session = await prisma.timeSession.findUnique({ where: { id: existing.active_session_id } });
-  const durationMinutes = computeDuration(session.started_at);
+  const startedAt = existing.active_session?.started_at || existing.updated_at;
+  const durationMinutes = computeDuration(startedAt);
 
-  await prisma.timeSession.update({
-    where: { id: existing.active_session_id },
-    data: { ended_at: endedAt, duration_minutes: durationMinutes }
-  });
+  // Close session & update active_timer in a single round-trip transaction
+  const operations = [];
+  if (existing.active_session_id) {
+    operations.push(
+      prisma.timeSession.update({
+        where: { id: existing.active_session_id },
+        data: { ended_at: endedAt, duration_minutes: durationMinutes }
+      })
+    );
+  }
+  operations.push(
+    prisma.activeTimer.update({
+      where: { user_id: user.id },
+      data: { status: 'PAUSED', active_session_id: null },
+      include: TIMER_INCLUDE
+    })
+  );
 
-  // Update active_timers to PAUSED, clear session ref
-  const timer = await prisma.activeTimer.update({
-    where: { user_id: user.id },
-    data: { status: 'PAUSED', active_session_id: null },
-    include: TIMER_INCLUDE
-  });
+  const results = await prisma.$transaction(operations);
+  const timer = results[results.length - 1];
 
-  await prisma.activityLog.create({
+  // Non-blocking activity log
+  void prisma.activityLog.create({
     data: {
       ticket_id: ticketId,
       user_id: user.id,
       type: 'TIMER_PAUSED',
       description: `Timer paused by ${user.name} (${durationMinutes}m this session)`
     }
-  });
+  }).catch(err => console.error('[ActivityLog] failed to log timer pause:', err.message));
 
   return formatActiveTimer(timer);
 }
@@ -161,14 +183,22 @@ export async function pauseTimer({ ticketId, user }) {
 // ─── RESUME ───────────────────────────────────────────────────────────────
 
 export async function resumeTimer({ ticketId, user }) {
-  const ticket = await prisma.ticket.findUnique({ where: { id: ticketId } });
+  const [ticket, existing] = await Promise.all([
+    prisma.ticket.findUnique({
+      where: { id: ticketId },
+      select: { id: true, assigned_to: true }
+    }),
+    prisma.activeTimer.findUnique({
+      where: { user_id: user.id }
+    })
+  ]);
+
   if (!ticket) { const err = new Error('Ticket not found'); err.statusCode = 404; throw err; }
   if (ticket.assigned_to !== user.id) {
     const err = new Error('Only the assigned user can operate this ticket\'s timer');
     err.statusCode = 403; throw err;
   }
 
-  const existing = await prisma.activeTimer.findUnique({ where: { user_id: user.id } });
   if (!existing || existing.ticket_id !== ticketId) {
     const err = new Error('No active timer for this ticket'); err.statusCode = 400; throw err;
   }
@@ -176,30 +206,33 @@ export async function resumeTimer({ ticketId, user }) {
     const err = new Error('Timer is already running'); err.statusCode = 400; throw err;
   }
 
-  // Open a NEW session row (per design.md §3.4 — resume opens a new row, doesn't reopen the old one)
-  const session = await prisma.timeSession.create({
-    data: {
-      ticket_id: ticketId,
-      user_id: user.id,
-      started_at: new Date(),
-      source: 'TIMER'
-    }
+  // Atomically create new session and update active timer
+  const timer = await prisma.$transaction(async (tx) => {
+    const session = await tx.timeSession.create({
+      data: {
+        ticket_id: ticketId,
+        user_id: user.id,
+        started_at: new Date(),
+        source: 'TIMER'
+      }
+    });
+
+    return tx.activeTimer.update({
+      where: { user_id: user.id },
+      data: { status: 'RUNNING', active_session_id: session.id },
+      include: TIMER_INCLUDE
+    });
   });
 
-  const timer = await prisma.activeTimer.update({
-    where: { user_id: user.id },
-    data: { status: 'RUNNING', active_session_id: session.id },
-    include: TIMER_INCLUDE
-  });
-
-  await prisma.activityLog.create({
+  // Non-blocking activity log
+  void prisma.activityLog.create({
     data: {
       ticket_id: ticketId,
       user_id: user.id,
       type: 'TIMER_RESUMED',
       description: `Timer resumed by ${user.name}`
     }
-  });
+  }).catch(err => console.error('[ActivityLog] failed to log timer resume:', err.message));
 
   return formatActiveTimer(timer);
 }
@@ -207,42 +240,55 @@ export async function resumeTimer({ ticketId, user }) {
 // ─── STOP ─────────────────────────────────────────────────────────────────
 
 export async function stopTimer({ ticketId, user }) {
-  const ticket = await prisma.ticket.findUnique({ where: { id: ticketId } });
+  const [ticket, existing] = await Promise.all([
+    prisma.ticket.findUnique({
+      where: { id: ticketId },
+      select: { id: true, assigned_to: true }
+    }),
+    prisma.activeTimer.findUnique({
+      where: { user_id: user.id },
+      include: {
+        active_session: { select: { id: true, started_at: true } }
+      }
+    })
+  ]);
+
   if (!ticket) { const err = new Error('Ticket not found'); err.statusCode = 404; throw err; }
   if (ticket.assigned_to !== user.id) {
     const err = new Error('Only the assigned user can operate this ticket\'s timer');
     err.statusCode = 403; throw err;
   }
 
-  const existing = await prisma.activeTimer.findUnique({ where: { user_id: user.id } });
   if (!existing || existing.ticket_id !== ticketId) {
     const err = new Error('No active timer for this ticket'); err.statusCode = 400; throw err;
   }
 
-  // If RUNNING, close the session first
+  // Batch close session and delete active_timer in single transaction
+  const operations = [];
   if (existing.status === 'RUNNING' && existing.active_session_id) {
-    const session = await prisma.timeSession.findUnique({ where: { id: existing.active_session_id } });
-    if (session) {
-      const endedAt = new Date();
-      const durationMinutes = computeDuration(session.started_at);
-      await prisma.timeSession.update({
+    const endedAt = new Date();
+    const startedAt = existing.active_session?.started_at || existing.updated_at;
+    const durationMinutes = computeDuration(startedAt);
+    operations.push(
+      prisma.timeSession.update({
         where: { id: existing.active_session_id },
         data: { ended_at: endedAt, duration_minutes: durationMinutes }
-      });
-    }
+      })
+    );
   }
+  operations.push(prisma.activeTimer.delete({ where: { user_id: user.id } }));
 
-  // Delete the active_timers row (back to IDLE)
-  await prisma.activeTimer.delete({ where: { user_id: user.id } });
+  await prisma.$transaction(operations);
 
-  await prisma.activityLog.create({
+  // Non-blocking activity log
+  void prisma.activityLog.create({
     data: {
       ticket_id: ticketId,
       user_id: user.id,
       type: 'TIMER_STOPPED',
       description: `Timer stopped by ${user.name}`
     }
-  });
+  }).catch(err => console.error('[ActivityLog] failed to log timer stop:', err.message));
 
   return { status: 'IDLE', ticketId };
 }
@@ -250,30 +296,38 @@ export async function stopTimer({ ticketId, user }) {
 // ─── STOP any active timer (for "Stop Current & Start New" conflict resolution)
 
 export async function stopActiveTimer(user) {
-  const existing = await prisma.activeTimer.findUnique({ where: { user_id: user.id } });
+  const existing = await prisma.activeTimer.findUnique({
+    where: { user_id: user.id },
+    include: {
+      active_session: { select: { id: true, started_at: true } }
+    }
+  });
   if (!existing) return null;
 
+  const operations = [];
   if (existing.status === 'RUNNING' && existing.active_session_id) {
-    const session = await prisma.timeSession.findUnique({ where: { id: existing.active_session_id } });
-    if (session) {
-      const durationMinutes = computeDuration(session.started_at);
-      await prisma.timeSession.update({
+    const startedAt = existing.active_session?.started_at || existing.updated_at;
+    const durationMinutes = computeDuration(startedAt);
+    operations.push(
+      prisma.timeSession.update({
         where: { id: existing.active_session_id },
         data: { ended_at: new Date(), duration_minutes: durationMinutes }
-      });
-    }
+      })
+    );
   }
+  operations.push(prisma.activeTimer.delete({ where: { user_id: user.id } }));
 
-  await prisma.activeTimer.delete({ where: { user_id: user.id } });
+  await prisma.$transaction(operations);
 
-  await prisma.activityLog.create({
+  // Non-blocking activity log
+  void prisma.activityLog.create({
     data: {
       ticket_id: existing.ticket_id,
       user_id: user.id,
       type: 'TIMER_STOPPED',
       description: `Timer force-stopped by ${user.name} (switching to another ticket)`
     }
-  });
+  }).catch(err => console.error('[ActivityLog] failed to log timer force-stop:', err.message));
 
   return { stoppedTicketId: existing.ticket_id };
 }

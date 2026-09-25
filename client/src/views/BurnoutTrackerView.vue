@@ -27,7 +27,14 @@ watch(selectedWeek, async (newWeek) => {
 });
 
 async function loadTrackerData() {
-  loading.value = true;
+  // Optimistic Cache Hit: render preloaded data instantly (0ms latency!)
+  if (workloadStore.groupWorkload) {
+    groupData.value = workloadStore.groupWorkload;
+    loading.value = false;
+  } else {
+    loading.value = true;
+  }
+
   try {
     const data = await workloadStore.fetchGroupWorkload(selectedWeek.value);
     groupData.value = data;

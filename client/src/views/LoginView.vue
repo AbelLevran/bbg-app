@@ -2,11 +2,13 @@
 import { ref } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
-import { Layers, Lock, User, AlertCircle, ArrowRight, CheckCircle2, ShieldCheck, Briefcase } from 'lucide-vue-next';
+import { usePreloadStore } from '@/stores/preload';
+import { Layers, Lock, User, AlertCircle, ArrowRight, CheckCircle2, ShieldCheck, Briefcase, Sparkles, Loader2 } from 'lucide-vue-next';
 
 const router = useRouter();
 const route = useRoute();
 const authStore = useAuthStore();
+const preloadStore = usePreloadStore();
 
 const username = ref('');
 const password = ref('');
@@ -36,7 +38,9 @@ async function handleLogin() {
 
   errorMessage.value = '';
   try {
-    await authStore.login(username.value, password.value);
+    const data = await authStore.login(username.value, password.value);
+    // Warmup entire workspace before routing to dashboard
+    await preloadStore.warmup(data.user);
     const redirectPath = route.query.redirect || '/dashboard';
     router.push(redirectPath);
   } catch (err) {
@@ -62,59 +66,90 @@ async function handleLogin() {
 
       <!-- Login Form Card -->
       <div class="login-card glass-card">
-        <h2 class="card-title">Sign In</h2>
-        <p class="card-subtitle">Enter your organization credentials</p>
+        <!-- Warmup Preload Screen (when user logs in successfully) -->
+        <div v-if="preloadStore.isPreloading" class="warmup-container">
+          <div class="warmup-icon-wrapper">
+            <div class="pulse-ring"></div>
+            <Layers :size="32" class="warmup-icon" />
+          </div>
 
-        <!-- Error Alert -->
-        <div v-if="errorMessage" class="error-alert">
-          <AlertCircle :size="16" class="error-icon" />
-          <span>{{ errorMessage }}</span>
+          <h2 class="warmup-title">Preparing Workspace</h2>
+          <p class="warmup-desc">{{ preloadStore.statusMessage }}</p>
+
+          <!-- Progress bar -->
+          <div class="progress-track">
+            <div class="progress-bar-fill" :style="{ width: `${preloadStore.progress}%` }"></div>
+          </div>
+          <div class="progress-meta">
+            <span class="meta-label">
+              <Loader2 :size="12" class="spin-icon" />
+              Initial data synchronization...
+            </span>
+            <span class="progress-percentage">{{ preloadStore.progress }}%</span>
+          </div>
+
+          <div class="warmup-tip">
+            <Sparkles :size="15" class="tip-icon" />
+            <span>All modules are being pre-loaded so that page navigation will be <strong>instant, seamless, and lightning fast</strong>.</span>
+          </div>
         </div>
 
-        <form @submit.prevent="handleLogin" class="login-form">
-          <div class="form-group">
-            <label for="input-username" class="form-label">Username</label>
-            <div class="input-wrap">
-              <User :size="16" class="input-icon" />
-              <input
-                id="input-username"
-                v-model="username"
-                type="text"
-                class="input-field with-icon"
-                placeholder="e.g. ahmad, budi, citra"
-                autocomplete="username"
-                required
-              />
-            </div>
+        <!-- Standard Login View -->
+        <template v-else>
+          <h2 class="card-title">Sign In</h2>
+          <p class="card-subtitle">Enter your organization credentials</p>
+
+          <!-- Error Alert -->
+          <div v-if="errorMessage" class="error-alert">
+            <AlertCircle :size="16" class="error-icon" />
+            <span>{{ errorMessage }}</span>
           </div>
 
-          <div class="form-group">
-            <label for="input-password" class="form-label">Password</label>
-            <div class="input-wrap">
-              <Lock :size="16" class="input-icon" />
-              <input
-                id="input-password"
-                v-model="password"
-                type="password"
-                class="input-field with-icon"
-                placeholder="Enter password"
-                autocomplete="current-password"
-                required
-              />
+          <form @submit.prevent="handleLogin" class="login-form">
+            <div class="form-group">
+              <label for="input-username" class="form-label">Username</label>
+              <div class="input-wrap">
+                <User :size="16" class="input-icon" />
+                <input
+                  id="input-username"
+                  v-model="username"
+                  type="text"
+                  class="input-field with-icon"
+                  placeholder="e.g. ahmad, budi, citra"
+                  autocomplete="username"
+                  required
+                />
+              </div>
             </div>
-          </div>
 
-          <button
-            id="btn-login-submit"
-            type="submit"
-            class="btn btn-primary btn-submit"
-            :disabled="authStore.isLoading"
-          >
-            <span v-if="!authStore.isLoading">Sign In</span>
-            <span v-else>Authenticating...</span>
-            <ArrowRight v-if="!authStore.isLoading" :size="16" />
-          </button>
-        </form>
+            <div class="form-group">
+              <label for="input-password" class="form-label">Password</label>
+              <div class="input-wrap">
+                <Lock :size="16" class="input-icon" />
+                <input
+                  id="input-password"
+                  v-model="password"
+                  type="password"
+                  class="input-field with-icon"
+                  placeholder="Enter password"
+                  autocomplete="current-password"
+                  required
+                />
+              </div>
+            </div>
+
+            <button
+              id="btn-login-submit"
+              type="submit"
+              class="btn btn-primary btn-submit"
+              :disabled="authStore.isLoading || preloadStore.isPreloading"
+            >
+              <span v-if="!authStore.isLoading">Sign In</span>
+              <span v-else>Authenticating...</span>
+              <ArrowRight v-if="!authStore.isLoading" :size="16" />
+            </button>
+          </form>
+        </template>
 
         <!-- Quick Select Seed Users (Dev Helper) -->
         <div class="quick-pick-section">
@@ -418,5 +453,144 @@ async function handleLogin() {
   background: var(--bg-surface-elevated);
   padding: 0.1rem 0.3rem;
   border-radius: var(--radius-sm);
+}
+
+/* ─── Warmup Screen Styles ────────────────────────────────────────── */
+.warmup-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 1.75rem 0.5rem 1rem;
+  animation: fadeIn 0.4s ease-out;
+}
+
+.warmup-icon-wrapper {
+  position: relative;
+  width: 72px;
+  height: 72px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bsi-teal-light);
+  border-radius: 50%;
+  margin-bottom: 1.5rem;
+}
+
+.warmup-icon {
+  color: var(--bsi-teal);
+  position: relative;
+  z-index: 2;
+  animation: floatIcon 2s ease-in-out infinite;
+}
+
+.pulse-ring {
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  border: 2px solid var(--bsi-teal);
+  opacity: 0.6;
+  animation: pulseExpand 2s cubic-bezier(0.24, 0, 0.38, 1) infinite;
+}
+
+.warmup-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 0.35rem;
+}
+
+.warmup-desc {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  min-height: 22px;
+  margin-bottom: 1.5rem;
+  transition: all 0.2s ease;
+}
+
+.progress-track {
+  width: 100%;
+  height: 8px;
+  background: var(--bg-surface-elevated, #f1f5f9);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  position: relative;
+  margin-bottom: 0.5rem;
+  border: 1px solid var(--border-subtle);
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--bsi-teal), #0284c7);
+  border-radius: var(--radius-full);
+  transition: width 0.35s ease;
+  box-shadow: 0 0 12px rgba(0, 163, 157, 0.4);
+}
+
+.progress-meta {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-bottom: 1.5rem;
+}
+
+.meta-label {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.spin-icon {
+  animation: spin 1.2s linear infinite;
+  color: var(--bsi-teal);
+}
+
+.progress-percentage {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  color: var(--bsi-teal-dark, #0f766e);
+}
+
+.warmup-tip {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: var(--radius-md);
+  padding: 0.75rem 0.85rem;
+  font-size: 0.76rem;
+  color: #166534;
+  line-height: 1.4;
+  text-align: left;
+}
+
+.tip-icon {
+  flex-shrink: 0;
+  color: #15803d;
+  margin-top: 1px;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes pulseExpand {
+  0% { transform: scale(0.95); opacity: 0.8; }
+  50% { transform: scale(1.15); opacity: 0.2; }
+  100% { transform: scale(0.95); opacity: 0.8; }
+}
+
+@keyframes floatIcon {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 </style>

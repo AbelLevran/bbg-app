@@ -138,15 +138,13 @@ function isActive(itemPath) {
 <style scoped>
 .sidebar {
   width: 260px;
-  min-height: 100vh;
+  height: 100vh;
   background: #ffffff;
   border-right: 1px solid var(--border-subtle);
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
-  position: sticky;
-  top: 0;
-  height: 100vh;
+  z-index: 50;
   box-shadow: 2px 0 8px rgba(0, 0, 0, 0.02);
 }
 

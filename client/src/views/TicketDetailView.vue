@@ -64,9 +64,9 @@ const canChangeStatus = computed(() => {
   );
 });
 
-async function loadTicket() {
+async function loadTicket(silent = true) {
   try {
-    const t = await ticketsStore.fetchTicket(ticketId.value);
+    const t = await ticketsStore.fetchTicket(ticketId.value, silent);
     // Sync closed session minutes to timer store if this ticket is active
     if (timerStore.activeTimer?.ticketId === t.id) {
       let closedMs = 0;
@@ -83,7 +83,7 @@ async function loadTicket() {
 }
 
 onMounted(() => {
-  loadTicket();
+  loadTicket(false);
 });
 
 // Status change handler
@@ -420,6 +420,8 @@ function formatMinutes(m) {
             :current-user-id="authStore.user?.id || ''"
             :estimated-minutes="ticket.estimatedMinutes"
             :actual-minutes="ticket.actualMinutes"
+            :ticket-number="ticket.ticketNumber"
+            :ticket-title="ticket.title"
             @conflict="handleTimerConflict"
             @refresh-ticket="loadTicket"
           />

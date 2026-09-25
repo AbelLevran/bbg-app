@@ -37,11 +37,13 @@ watch(() => route.path, () => {
     <div class="main-content-wrapper">
       <Topbar @toggle-menu="toggleMobileNav" />
       <main class="page-content">
-        <router-view v-slot="{ Component }">
-          <transition name="fade" mode="out-in">
-            <component :is="Component" />
-          </transition>
-        </router-view>
+        <div class="page-content-inner">
+          <router-view v-slot="{ Component }">
+            <transition name="fade" mode="out-in">
+              <component :is="Component" />
+            </transition>
+          </router-view>
+        </div>
       </main>
     </div>
   </div>
@@ -50,11 +52,11 @@ watch(() => route.path, () => {
 <style scoped>
 .app-layout {
   display: flex;
-  min-height: 100vh;
+  height: 100vh;
+  width: 100vw;
   background-color: var(--bg-app);
   position: relative;
-  max-width: 100vw;
-  overflow-x: hidden;
+  overflow: hidden; /* Locks outer window from scrolling */
 }
 
 .mobile-backdrop {
@@ -69,17 +71,21 @@ watch(() => route.path, () => {
   flex: 1;
   display: flex;
   flex-direction: column;
+  height: 100vh;
   min-width: 0;
-  width: 100%;
-  max-width: 100%;
-  overflow-x: hidden;
+  overflow: hidden; /* Topbar stays locked at top, content scrolls below */
 }
 
 .page-content {
   flex: 1;
+  height: calc(100vh - 64px);
   padding: 2rem 1.75rem;
-  overflow-y: auto;
+  overflow-y: auto; /* All scrolling strictly isolated to page-content */
   overflow-x: hidden;
+  width: 100%;
+}
+
+.page-content-inner {
   max-width: 1440px;
   margin: 0 auto;
   width: 100%;
@@ -97,6 +103,7 @@ watch(() => route.path, () => {
 
 @media (max-width: 768px) {
   .page-content {
+    height: calc(100vh - 56px);
     padding: 1rem 0.85rem 3rem;
   }
 }

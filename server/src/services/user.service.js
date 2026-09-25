@@ -82,15 +82,17 @@ export async function getEmployeeDetail({ userId, weekDate }) {
   }
 
   const week = weekDate || new Date().toISOString().slice(0, 10);
-  const currentWorkload = await getUserWorkload(userId, week);
-  const weeklyTrend = await getUserWeeklyTrend(userId, week, 4);
-
-  // Ticket status breakdown
-  const statusGroups = await prisma.ticket.groupBy({
-    by: ['status'],
-    where: { assigned_to: userId },
-    _count: { _all: true }
-  });
+  
+  // Parallel fetch: current workload, 4-week trend, and ticket status breakdown
+  const [currentWorkload, weeklyTrend, statusGroups] = await Promise.all([
+    getUserWorkload(userId, week),
+    getUserWeeklyTrend(userId, week, 4),
+    prisma.ticket.groupBy({
+      by: ['status'],
+      where: { assigned_to: userId },
+      _count: { _all: true }
+    })
+  ]);
 
   const statusMap = {
     TODO: 0,

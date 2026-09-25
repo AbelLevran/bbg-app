@@ -67,18 +67,32 @@ watch(selectedWeek, async (newWeek) => {
 
 async function loadMyWork() {
   if (!authStore.user) return;
-  loading.value = true;
+  const week = selectedWeek.value;
+  const userId = authStore.user.id;
+
+  // Optimistic Cache Hit: render preloaded data instantly (0ms latency!)
+  if (workloadStore.userWorkload) {
+    workload.value = workloadStore.userWorkload;
+    trendData.value = workloadStore.userTrend || [];
+    dailyData.value = workloadStore.userDaily || [];
+    myTickets.value = (ticketsStore.list || []).filter(t => t.assignedTo?.id === userId);
+    loading.value = false;
+  } else {
+    loading.value = true;
+  }
+
   try {
-    const week = selectedWeek.value;
-    const userId = authStore.user.id;
+    // Parallel fetch: personal workload, 4-week trend, daily breakdown, and tickets
+    const [wl, trend, daily] = await Promise.all([
+      workloadStore.fetchUserWorkload(userId, week),
+      workloadStore.fetchUserTrend(userId, week, 4),
+      workloadStore.fetchUserDaily(userId, week),
+      ticketsStore.fetchTickets()
+    ]);
 
-    // Load personal workload, 4-week trend, daily breakdown
-    workload.value = await workloadStore.fetchUserWorkload(userId, week);
-    trendData.value = await workloadStore.fetchUserTrend(userId, week, 4);
-    dailyData.value = await workloadStore.fetchUserDaily(userId, week);
-
-    // Load my tickets (assignedTo: self)
-    await ticketsStore.fetchTickets();
+    workload.value = wl;
+    trendData.value = trend;
+    dailyData.value = daily;
     myTickets.value = (ticketsStore.list || []).filter(t => t.assignedTo?.id === userId);
   } catch (err) {
     console.error('Failed to load My Work data:', err);

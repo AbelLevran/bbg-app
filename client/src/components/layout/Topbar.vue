@@ -150,6 +150,7 @@ async function handleLogout() {
 <style scoped>
 .topbar {
   height: 64px;
+  flex-shrink: 0;
   background: #ffffff;
   border-bottom: 1px solid var(--border-subtle);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
@@ -157,8 +158,6 @@ async function handleLogout() {
   align-items: center;
   justify-content: space-between;
   padding: 0 1.75rem;
-  position: sticky;
-  top: 0;
   z-index: 40;
 }
 

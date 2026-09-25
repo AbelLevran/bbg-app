@@ -32,14 +32,11 @@ const ticketsTitle = computed(() => {
   return 'My Tickets';
 });
 
-onMounted(async () => {
+onMounted(() => {
   if (authStore.isHeadGroup) {
-    try {
-      const res = await orgApi.getDepartments();
+    orgApi.getDepartments().then(res => {
       departments.value = res.departments || [];
-    } catch {
-      // ignore
-    }
+    }).catch(() => {});
   }
   loadTickets();
   loadEvents();

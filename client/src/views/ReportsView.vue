@@ -3,6 +3,7 @@ import { ref, computed, onMounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
 import { useWorkloadStore } from '@/stores/workload';
+import { usePreloadStore } from '@/stores/preload';
 import { reportsApi } from '@/api/reports';
 import WeekSelector from '@/components/common/WeekSelector.vue';
 import {
@@ -21,6 +22,7 @@ import {
 const router = useRouter();
 const authStore = useAuthStore();
 const workloadStore = useWorkloadStore();
+const preloadStore = usePreloadStore();
 
 const activeTab = ref('weekly'); // 'weekly' | 'department'
 const selectedWeek = ref(workloadStore.selectedWeek);
@@ -42,7 +44,16 @@ watch(selectedWeek, async (newWeek) => {
 });
 
 async function loadReports() {
-  loading.value = true;
+  // Optimistic Cache Hit: render preloaded data instantly (0ms latency!)
+  const cached = preloadStore.getCachedReports(selectedWeek.value);
+  if (cached.weekly && cached.department) {
+    weeklyData.value = cached.weekly;
+    departmentData.value = cached.department;
+    loading.value = false;
+  } else {
+    loading.value = true;
+  }
+
   errorMsg.value = '';
   try {
     const [weeklyRes, deptRes] = await Promise.all([
@@ -51,6 +62,7 @@ async function loadReports() {
     ]);
     weeklyData.value = weeklyRes.rows || [];
     departmentData.value = deptRes.rows || [];
+    preloadStore.setCachedReports(selectedWeek.value, weeklyData.value, departmentData.value);
   } catch (err) {
     console.error('Failed to load reports:', err);
     errorMsg.value = err.message || 'Unable to load report data';

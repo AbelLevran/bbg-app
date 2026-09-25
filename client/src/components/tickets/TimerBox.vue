@@ -8,7 +8,9 @@ const props = defineProps({
   assignedToId: { type: String, required: true },
   currentUserId: { type: String, required: true },
   estimatedMinutes: { type: Number, default: 0 },
-  actualMinutes: { type: Number, default: 0 }
+  actualMinutes: { type: Number, default: 0 },
+  ticketNumber: { type: String, default: '' },
+  ticketTitle: { type: String, default: '' }
 });
 
 const emit = defineEmits(['conflict', 'stopped', 'refreshTicket']);
@@ -21,20 +23,21 @@ const isPaused  = computed(() => isMyTimer.value && timerStore.activeTimer?.stat
 const isIdle    = computed(() => !isMyTimer.value || !timerStore.activeTimer);
 const canOperate = computed(() => props.assignedToId === props.currentUserId);
 
-const loading = computed(() => false); // individual action loading can be added
+const loading = computed(() => false);
 
 const progress = computed(() => {
   if (!props.estimatedMinutes) return 0;
-  const totalMs = props.actualMinutes * 60000 + (isRunning.value ? timerStore.elapsedMs % (props.actualMinutes * 60000 || 1) : 0);
   return Math.min(100, Math.round((props.actualMinutes / props.estimatedMinutes) * 100));
 });
 
 async function handleStart() {
   try {
-    await timerStore.start(props.ticketId);
+    await timerStore.start(props.ticketId, {
+      ticketNumber: props.ticketNumber,
+      title: props.ticketTitle
+    });
   } catch (err) {
     if (err?.status === 409 || (err?.message?.includes('409') || err?.conflict)) {
-      // Handled by API client throwing the response
       emit('conflict', err.conflict || timerStore.activeTimer);
     }
   }

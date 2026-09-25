@@ -62,42 +62,150 @@ export const useTimerStore = defineStore('timer', () => {
     }
   }
 
-  async function start(ticketId) {
-    const res = await timerApi.start(ticketId);
-    applyTimerState(res.timer);
-    return res;
+  async function start(ticketId, ticketMeta = {}) {
+    const prevTimer = activeTimer.value ? { ...activeTimer.value } : null;
+    const prevClosedMs = closedSessionMs;
+    const prevSessionStartTs = sessionStartTs;
+
+    // Optimistic instant state update (0ms perceived latency!)
+    activeTimer.value = {
+      ticketId,
+      ticketNumber: ticketMeta.ticketNumber || activeTimer.value?.ticketNumber || null,
+      ticketTitle: ticketMeta.title || activeTimer.value?.ticketTitle || null,
+      status: 'RUNNING',
+      activeSessionStartedAt: new Date().toISOString()
+    };
+    sessionStartTs = Date.now();
+    startTicking();
+    _recompute();
+
+    try {
+      const res = await timerApi.start(ticketId);
+      applyTimerState(res.timer);
+      return res;
+    } catch (err) {
+      // Rollback on conflict or network failure
+      activeTimer.value = prevTimer;
+      closedSessionMs = prevClosedMs;
+      sessionStartTs = prevSessionStartTs;
+      if (prevTimer?.status === 'RUNNING') {
+        startTicking();
+      } else {
+        stopTicking();
+      }
+      _recompute();
+      throw err;
+    }
   }
 
   async function pause(ticketId) {
-    const res = await timerApi.pause(ticketId);
-    applyTimerState(res.timer);
-    return res;
+    const prevTimer = activeTimer.value ? { ...activeTimer.value } : null;
+    const prevClosedMs = closedSessionMs;
+    const prevSessionStartTs = sessionStartTs;
+
+    // Optimistically freeze clock and update state instantly
+    if (sessionStartTs) {
+      closedSessionMs += (Date.now() - sessionStartTs);
+    }
+    sessionStartTs = null;
+    stopTicking();
+    if (activeTimer.value) {
+      activeTimer.value = { ...activeTimer.value, status: 'PAUSED' };
+    }
+    _recompute();
+
+    try {
+      const res = await timerApi.pause(ticketId);
+      applyTimerState(res.timer);
+      return res;
+    } catch (err) {
+      // Rollback
+      activeTimer.value = prevTimer;
+      closedSessionMs = prevClosedMs;
+      sessionStartTs = prevSessionStartTs;
+      if (prevTimer?.status === 'RUNNING') startTicking();
+      _recompute();
+      throw err;
+    }
   }
 
   async function resume(ticketId) {
-    const res = await timerApi.resume(ticketId);
-    applyTimerState(res.timer);
-    return res;
+    const prevTimer = activeTimer.value ? { ...activeTimer.value } : null;
+    const prevClosedMs = closedSessionMs;
+    const prevSessionStartTs = sessionStartTs;
+
+    // Optimistically set to running immediately
+    activeTimer.value = {
+      ...(activeTimer.value || {}),
+      ticketId,
+      status: 'RUNNING',
+      activeSessionStartedAt: new Date().toISOString()
+    };
+    sessionStartTs = Date.now();
+    startTicking();
+    _recompute();
+
+    try {
+      const res = await timerApi.resume(ticketId);
+      applyTimerState(res.timer);
+      return res;
+    } catch (err) {
+      activeTimer.value = prevTimer;
+      closedSessionMs = prevClosedMs;
+      sessionStartTs = prevSessionStartTs;
+      stopTicking();
+      _recompute();
+      throw err;
+    }
   }
 
   async function stop(ticketId) {
-    const res = await timerApi.stop(ticketId);
+    const prevTimer = activeTimer.value ? { ...activeTimer.value } : null;
+    const prevClosedMs = closedSessionMs;
+    const prevSessionStartTs = sessionStartTs;
+
+    // Optimistically clear timer immediately
     activeTimer.value = null;
     closedSessionMs = 0;
     sessionStartTs = null;
     stopTicking();
     elapsedMs.value = 0;
-    return res;
+
+    try {
+      const res = await timerApi.stop(ticketId);
+      return res;
+    } catch (err) {
+      activeTimer.value = prevTimer;
+      closedSessionMs = prevClosedMs;
+      sessionStartTs = prevSessionStartTs;
+      if (prevTimer?.status === 'RUNNING') startTicking();
+      _recompute();
+      throw err;
+    }
   }
 
   async function stopActive() {
-    const res = await timerApi.stopActive();
+    const prevTimer = activeTimer.value ? { ...activeTimer.value } : null;
+    const prevClosedMs = closedSessionMs;
+    const prevSessionStartTs = sessionStartTs;
+
     activeTimer.value = null;
     closedSessionMs = 0;
     sessionStartTs = null;
     stopTicking();
     elapsedMs.value = 0;
-    return res;
+
+    try {
+      const res = await timerApi.stopActive();
+      return res;
+    } catch (err) {
+      activeTimer.value = prevTimer;
+      closedSessionMs = prevClosedMs;
+      sessionStartTs = prevSessionStartTs;
+      if (prevTimer?.status === 'RUNNING') startTicking();
+      _recompute();
+      throw err;
+    }
   }
 
   // Formatted elapsed string: HH:MM:SS

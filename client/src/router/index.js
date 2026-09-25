@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
+import { usePreloadStore } from '@/stores/preload';
 
 import LoginView from '@/views/LoginView.vue';
 import AppLayout from '@/components/layout/AppLayout.vue';
@@ -102,6 +103,14 @@ router.beforeEach(async (to, from, next) => {
   // Ensure auth state is restored on initial load
   if (!authStore.isInitialized) {
     await authStore.initAuth();
+  }
+
+  // If already authenticated (e.g. page refresh), trigger warmup in background
+  if (authStore.isAuthenticated) {
+    const preloadStore = usePreloadStore();
+    if (!preloadStore.isWarmedUp && !preloadStore.isPreloading) {
+      preloadStore.warmup(authStore.user);
+    }
   }
 
   // Update page title

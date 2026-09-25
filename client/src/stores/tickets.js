@@ -46,8 +46,8 @@ export const useTicketsStore = defineStore('tickets', () => {
     }
   }
 
-  async function fetchTicket(id) {
-    loading.value = true;
+  async function fetchTicket(id, silent = false) {
+    if (!silent && !currentTicket.value) loading.value = true;
     error.value = null;
     try {
       const res = await ticketsApi.get(id);

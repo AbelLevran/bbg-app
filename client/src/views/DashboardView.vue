@@ -79,10 +79,38 @@ watch(selectedWeek, async (newWeek) => {
 });
 
 async function loadDashboardData() {
-  loading.value = true;
-  try {
-    const week = selectedWeek.value;
+  const week = selectedWeek.value;
 
+  // Optimistic Cache Hit: render preloaded data instantly (0ms latency!)
+  const hasCachedData = (authStore.isHeadGroup && workloadStore.groupWorkload) ||
+                        (authStore.isDepartmentHead && workloadStore.deptWorkload) ||
+                        (authStore.isMember && workloadStore.userWorkload);
+
+  if (hasCachedData) {
+    if (authStore.isHeadGroup) {
+      groupData.value = workloadStore.groupWorkload;
+      sustainedAlerts.value = workloadStore.alerts || [];
+      trendData.value = workloadStore.userTrend || [];
+      dailyData.value = workloadStore.userDaily || [];
+    } else if (authStore.isDepartmentHead) {
+      deptData.value = workloadStore.deptWorkload;
+      trendData.value = workloadStore.userTrend || [];
+      dailyData.value = workloadStore.userDaily || [];
+      sustainedAlerts.value = workloadStore.alerts || [];
+    } else {
+      memberData.value = workloadStore.userWorkload;
+      trendData.value = workloadStore.userTrend || [];
+      dailyData.value = workloadStore.userDaily || [];
+      memberActiveTickets.value = (ticketsStore.list || []).filter(t =>
+        ['TODO', 'IN_PROGRESS', 'IN_REVIEW', 'STUCK'].includes(t.status)
+      );
+    }
+    loading.value = false;
+  } else {
+    loading.value = true;
+  }
+
+  try {
     if (authStore.isHeadGroup) {
       // Load group data concurrently in parallel
       const [gData, alerts, trend, daily] = await Promise.all([
