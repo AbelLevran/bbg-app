@@ -25,7 +25,7 @@ const selectedWeek = ref(workloadStore.selectedWeek);
 const workload = ref(workloadStore.userWorkload || null);
 const trendData = ref(workloadStore.userTrend || []);
 const dailyData = ref(workloadStore.userDaily || []);
-const myTickets = ref((ticketsStore.list || []).filter(t => t.assignedTo?.id === authStore.user?.id));
+const myTickets = ref((ticketsStore.rawList || []).filter(t => t.assignedTo?.id === authStore.user?.id));
 const loading = ref(!workloadStore.userWorkload);
 
 const activeTickets = computed(() =>
@@ -75,7 +75,7 @@ async function loadMyWork(force = false) {
     workload.value = workloadStore.userWorkload;
     trendData.value = workloadStore.userTrend || [];
     dailyData.value = workloadStore.userDaily || [];
-    myTickets.value = (ticketsStore.list || []).filter(t => t.assignedTo?.id === userId);
+    myTickets.value = (ticketsStore.rawList || []).filter(t => t.assignedTo?.id === userId);
     loading.value = false;
     if (!force) return;
   } else {
@@ -94,7 +94,7 @@ async function loadMyWork(force = false) {
     workload.value = wl;
     trendData.value = trend;
     dailyData.value = daily;
-    myTickets.value = (ticketsStore.list || []).filter(t => t.assignedTo?.id === userId);
+    myTickets.value = (ticketsStore.rawList || []).filter(t => t.assignedTo?.id === userId);
   } catch (err) {
     console.error('Failed to load My Work data:', err);
   } finally {

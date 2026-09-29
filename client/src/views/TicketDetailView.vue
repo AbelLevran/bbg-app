@@ -94,7 +94,7 @@ async function handleStatusSelect(newStatus) {
   }
   try {
     await ticketsStore.changeStatus(ticketId.value, newStatus);
-    loadTicket();
+    // Optimistic update in store — no re-fetch needed
   } catch (err) {
     alert(err.message || 'Failed to update status');
   }
@@ -104,7 +104,7 @@ async function handleStuckConfirm(reason) {
   showStuckModal.value = false;
   try {
     await ticketsStore.changeStatus(ticketId.value, 'STUCK', reason);
-    loadTicket();
+    // Optimistic update in store — no re-fetch needed
   } catch (err) {
     alert(err.message || 'Failed to mark ticket as stuck');
   }
@@ -162,7 +162,7 @@ async function handleEditSubmit() {
       dueDate: editForm.value.dueDate
     });
     showEditModal.value = false;
-    loadTicket();
+    // Optimistic update in store — no re-fetch needed
   } catch (err) {
     alert(err.message || 'Failed to update ticket');
   } finally {

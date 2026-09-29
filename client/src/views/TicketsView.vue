@@ -82,13 +82,13 @@ async function loadEvents(force = false) {
 
 function handleFiltersUpdate(newFilters) {
   ticketsStore.filters = { ...newFilters };
-  loadTickets();
+  // Client-side filtering — list computed auto-recomputes instantly
 }
 
 function handleSort(field, dir) {
   ticketsStore.setFilter('sortBy', field);
   ticketsStore.setFilter('sortDir', dir);
-  loadTickets();
+  // Client-side sorting — list computed auto-recomputes instantly
 }
 
 function handleOpen(id) {

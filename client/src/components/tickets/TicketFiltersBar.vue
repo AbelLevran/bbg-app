@@ -15,7 +15,7 @@ let searchTimer = null;
 
 watch(localSearch, val => {
   clearTimeout(searchTimer);
-  searchTimer = setTimeout(() => emit('update:filters', { ...props.filters, search: val }), 350);
+  searchTimer = setTimeout(() => emit('update:filters', { ...props.filters, search: val }), 150);
 });
 
 function updateFilter(key, value) {

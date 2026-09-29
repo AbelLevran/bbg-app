@@ -2,16 +2,18 @@ import { createRouter, createWebHistory } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
 import { usePreloadStore } from '@/stores/preload';
 
-import LoginView from '@/views/LoginView.vue';
 import AppLayout from '@/components/layout/AppLayout.vue';
-import DashboardView from '@/views/DashboardView.vue';
-import TicketsView from '@/views/TicketsView.vue';
-import NewTicketView from '@/views/NewTicketView.vue';
-import TicketDetailView from '@/views/TicketDetailView.vue';
-import MyWorkView from '@/views/MyWorkView.vue';
-import BurnoutTrackerView from '@/views/BurnoutTrackerView.vue';
-import ReportsView from '@/views/ReportsView.vue';
-import EmployeeDetailView from '@/views/EmployeeDetailView.vue';
+
+// Lazy-loaded views — each becomes a separate chunk, loaded on-demand
+const LoginView = () => import('@/views/LoginView.vue');
+const DashboardView = () => import('@/views/DashboardView.vue');
+const TicketsView = () => import('@/views/TicketsView.vue');
+const NewTicketView = () => import('@/views/NewTicketView.vue');
+const TicketDetailView = () => import('@/views/TicketDetailView.vue');
+const MyWorkView = () => import('@/views/MyWorkView.vue');
+const BurnoutTrackerView = () => import('@/views/BurnoutTrackerView.vue');
+const ReportsView = () => import('@/views/ReportsView.vue');
+const EmployeeDetailView = () => import('@/views/EmployeeDetailView.vue');
 
 const routes = [
   {

@@ -48,7 +48,7 @@ const groupData = ref(workloadStore.groupWorkload || null);
 const deptData = ref(workloadStore.deptWorkload || null);
 const memberData = ref(workloadStore.userWorkload || null);
 const sustainedAlerts = ref(workloadStore.alerts || []);
-const memberActiveTickets = ref((ticketsStore.list || []).filter(t =>
+const memberActiveTickets = ref((ticketsStore.rawList || []).filter(t =>
   ['TODO', 'IN_PROGRESS', 'IN_REVIEW', 'STUCK'].includes(t.status)
 ));
 const trendData = ref(workloadStore.userTrend || []);
@@ -111,7 +111,7 @@ async function loadDashboardData(force = false) {
       memberData.value = workloadStore.userWorkload;
       trendData.value = workloadStore.userTrend || [];
       dailyData.value = workloadStore.userDaily || [];
-      memberActiveTickets.value = (ticketsStore.list || []).filter(t =>
+      memberActiveTickets.value = (ticketsStore.rawList || []).filter(t =>
         ['TODO', 'IN_PROGRESS', 'IN_REVIEW', 'STUCK'].includes(t.status)
       );
     }
@@ -159,7 +159,7 @@ async function loadDashboardData(force = false) {
       memberData.value = mData;
       trendData.value = trend;
       dailyData.value = daily;
-      memberActiveTickets.value = (ticketsStore.list || []).filter(t =>
+      memberActiveTickets.value = (ticketsStore.rawList || []).filter(t =>
         ['TODO', 'IN_PROGRESS', 'IN_REVIEW', 'STUCK'].includes(t.status)
       );
     }

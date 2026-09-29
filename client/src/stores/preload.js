@@ -104,18 +104,13 @@ export const usePreloadStore = defineStore('preload', () => {
       progress.value = 95;
       statusMessage.value = 'Validating cache & preparing workspace...';
 
-      // Brief pause for visual smoothness
-      await new Promise(resolve => setTimeout(resolve, 250));
-
       progress.value = 100;
       statusMessage.value = 'Workspace ready!';
       isWarmedUp.value = true;
     } catch (err) {
       console.warn('Preload warmup warning:', err);
     } finally {
-      setTimeout(() => {
-        isPreloading.value = false;
-      }, 300);
+      isPreloading.value = false;
     }
   }
 
